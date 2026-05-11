@@ -1,4 +1,5 @@
 import math
+import random
 
 import pygame
 
@@ -18,6 +19,10 @@ class Car:
         self.acceleration = 0.18
         self.friction = 0.05
         self.turn_speed = 3.2
+        self.base_max_speed = self.max_speed
+        self.base_acceleration = self.acceleration
+        self.base_friction = self.friction
+        self.base_turn_speed = self.turn_speed
         self.color = color
         self.controls = controls or {}
         self.start_x = start_x
@@ -30,6 +35,8 @@ class Car:
         self.y = self.start_y
         self.angle = self.start_angle
         self.speed = 0.0
+        self.boost_timer = 0
+        self.slow_timer = 0
 
     def update_manual(self, keys: pygame.key.ScancodeWrapper) -> None:
         self.move(
@@ -46,26 +53,60 @@ class Car:
         right = outputs[3] > 0.5
         self.move(forward=forward, backward=backward, left=left, right=right)
 
+    def apply_boost(self, duration: int = 90) -> None:
+        self.boost_timer = max(self.boost_timer, duration)
+
+    def apply_slow(self, duration: int = 60) -> None:
+        self.slow_timer = max(self.slow_timer, duration)
+        self.speed *= 0.7
+
+    def skid(self, strength: float = 10.0) -> None:
+        self.angle += random.choice((-1, 1)) * strength
+        self.speed *= 0.75
+
+    def tick_effects(self) -> None:
+        if self.boost_timer > 0:
+            self.boost_timer -= 1
+        if self.slow_timer > 0:
+            self.slow_timer -= 1
+
+    def item_output(self, outputs: list[float] | tuple[float, ...]) -> bool:
+        return len(outputs) > 4 and outputs[4] > 0.5
+
     def move(self, forward: bool, backward: bool, left: bool, right: bool) -> None:
+        self.tick_effects()
+        max_speed = self.base_max_speed
+        acceleration = self.base_acceleration
+        friction = self.base_friction
+        turn_speed = self.base_turn_speed
+
+        if self.boost_timer > 0:
+            max_speed *= 1.3
+            acceleration *= 1.5
+        if self.slow_timer > 0:
+            max_speed *= 0.72
+            acceleration *= 0.65
+            turn_speed *= 0.8
+
         if forward:
-            self.speed += self.acceleration
+            self.speed += acceleration
         if backward:
-            self.speed -= self.acceleration * 0.8
+            self.speed -= acceleration * 0.8
 
         if not (forward or backward):
             if self.speed > 0:
-                self.speed = max(0, self.speed - self.friction)
+                self.speed = max(0, self.speed - friction)
             elif self.speed < 0:
-                self.speed = min(0, self.speed + self.friction)
+                self.speed = min(0, self.speed + friction)
 
-        self.speed = max(-self.max_speed / 2, min(self.max_speed, self.speed))
+        self.speed = max(-max_speed / 2, min(max_speed, self.speed))
 
         if abs(self.speed) > 0.2:
             direction = 1 if self.speed >= 0 else -1
             if left:
-                self.angle -= self.turn_speed * direction
+                self.angle -= turn_speed * direction
             if right:
-                self.angle += self.turn_speed * direction
+                self.angle += turn_speed * direction
 
         radians = math.radians(self.angle)
         self.x += math.cos(radians) * self.speed

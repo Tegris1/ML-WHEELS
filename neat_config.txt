@@ -42,8 +42,8 @@ single_structural_mutation = False
 structural_mutation_surer = default
 
 num_hidden              = 0
-num_inputs              = 8
-num_outputs             = 4
+num_inputs              = 14
+num_outputs             = 5
 
 response_init_mean      = 1.0
 response_init_stdev     = 0.0
