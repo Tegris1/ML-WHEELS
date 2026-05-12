@@ -23,16 +23,3 @@ CHECKPOINTS = [
     pygame.Rect(100, 210, 180, 280),
     pygame.Rect(280, 80, 440, 130),
 ]
-
-PLAYER_ONE_CONTROLS = {
-    "forward": pygame.K_w,
-    "backward": pygame.K_s,
-    "left": pygame.K_a,
-    "right": pygame.K_d,
-}
-PLAYER_TWO_CONTROLS = {
-    "forward": pygame.K_UP,
-    "backward": pygame.K_DOWN,
-    "left": pygame.K_LEFT,
-    "right": pygame.K_RIGHT,
-}

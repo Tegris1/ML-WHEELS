@@ -1,19 +1,14 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
-
-import pygame
 
 
 class Car:
     def __init__(
         self,
-        color: tuple[int, int, int],
         start_x: float,
         start_y: float,
         start_angle: float = -90,
-        controls: Mapping[str, int] | None = None,
     ) -> None:
         self.width = 22
         self.height = 38
@@ -21,8 +16,6 @@ class Car:
         self.acceleration = 0.18
         self.friction = 0.05
         self.turn_speed = 3.2
-        self.color = color
-        self.controls = controls or {}
         self.start_x = start_x
         self.start_y = start_y
         self.start_angle = start_angle
@@ -33,22 +26,6 @@ class Car:
         self.y = self.start_y
         self.angle = self.start_angle
         self.speed = 0.0
-
-    def update_manual(self, keys: pygame.key.ScancodeWrapper) -> None:
-        self.move(
-            forward=keys[self.controls["forward"]],
-            backward=keys[self.controls["backward"]],
-            left=keys[self.controls["left"]],
-            right=keys[self.controls["right"]],
-        )
-
-    def update_ai(self, outputs: Sequence[float]) -> None:
-        self.move(
-            forward=outputs[0] > 0.5,
-            backward=outputs[1] > 0.5,
-            left=outputs[2] > 0.5,
-            right=outputs[3] > 0.5,
-        )
 
     def move(self, forward: bool, backward: bool, left: bool, right: bool) -> None:
         if forward:
@@ -74,33 +51,6 @@ class Car:
         radians = math.radians(self.angle)
         self.x += math.cos(radians) * self.speed
         self.y += math.sin(radians) * self.speed
-
-    def sensor_distances(
-        self,
-        track_mask: pygame.mask.Mask,
-        world_width: int,
-        world_height: int,
-        ray_angles: tuple[int, ...] = (-80, -40, 0, 40, 80),
-        max_distance: int = 220,
-    ) -> list[float]:
-        distances = []
-        for offset in ray_angles:
-            ray_angle = math.radians(self.angle + offset)
-            distance = 0
-            while distance < max_distance:
-                point_x = int(self.x + math.cos(ray_angle) * distance)
-                point_y = int(self.y + math.sin(ray_angle) * distance)
-                if (
-                    point_x < 0
-                    or point_x >= world_width
-                    or point_y < 0
-                    or point_y >= world_height
-                    or track_mask.get_at((point_x, point_y)) == 0
-                ):
-                    break
-                distance += 4
-            distances.append(distance / max_distance)
-        return distances
 
     def corners(self) -> list[tuple[float, float]]:
         radians = math.radians(self.angle)

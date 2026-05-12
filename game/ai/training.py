@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import pickle
+from collections.abc import Sequence
 
 import pygame
 
@@ -12,6 +13,7 @@ from game.logic.race import (
     car_hits_wall,
     next_checkpoint_center,
 )
+from game.logic.sensors import read_car_sensors
 from game.models.car import Car
 from game.paths import NEAT_CONFIG_PATH, WINNER_PATH
 from game.rendering.car import draw_car, draw_car_sensors
@@ -45,7 +47,10 @@ def distance_to_target(car: Car, target_x: float, target_y: float) -> float:
 
 def network_inputs(car: Car, race_state: RaceState, track_mask: pygame.mask.Mask) -> list[float]:
     target_x, target_y = next_checkpoint_center(race_state)
-    sensors = car.sensor_distances(track_mask, WIDTH, HEIGHT)
+    sensors = [
+        reading.normalized_distance
+        for reading in read_car_sensors(car, track_mask, WIDTH, HEIGHT)
+    ]
     return sensors + [
         car.speed / car.max_speed,
         heading_to_target(car, target_x, target_y),
@@ -53,9 +58,8 @@ def network_inputs(car: Car, race_state: RaceState, track_mask: pygame.mask.Mask
     ]
 
 
-def create_ai_car(color: tuple[int, int, int] = AI_COLOR) -> Car:
+def create_ai_car() -> Car:
     return Car(
-        color=color,
         start_x=WIDTH // 2 + 70,
         start_y=145,
     )
@@ -121,7 +125,7 @@ def watch_winner() -> None:
     font = pygame.font.SysFont("arial", 28, bold=True)
     track_mask = build_track_mask()
 
-    car = create_ai_car(AI_COLOR)
+    car = create_ai_car()
     race_state = RaceState()
     crashed = False
 
@@ -137,13 +141,13 @@ def watch_winner() -> None:
 
         if not crashed:
             outputs = net.activate(network_inputs(car, race_state, track_mask))
-            car.update_ai(outputs)
+            _apply_ai_outputs(car, outputs)
             crashed = car_hits_wall(car, track_mask)
             if not crashed:
                 advance_race_state(car, race_state)
 
         draw_track(screen)
-        draw_car(car, screen)
+        draw_car(car, screen, AI_COLOR)
         draw_car_sensors(car, screen, track_mask)
         screen.blit(_watch_message(font, race_state, crashed), (20, 20))
         pygame.display.flip()
@@ -183,7 +187,7 @@ def _run_generation_loop(
 
         draw_track(screen)
         for car in cars:
-            draw_car(car, screen)
+            draw_car(car, screen, AI_COLOR)
         screen.blit(_training_message(font, len(cars), steps), (20, 20))
         pygame.display.flip()
         clock.tick(FPS)
@@ -202,7 +206,7 @@ def _update_ai_driver(
     race_state = race_states[index]
 
     outputs = nets[index].activate(network_inputs(car, race_state, track_mask))
-    car.update_ai(outputs)
+    _apply_ai_outputs(car, outputs)
     genome.fitness += max(car.speed, 0) * 0.02
 
     if car_hits_wall(car, track_mask):
@@ -220,6 +224,15 @@ def _update_ai_driver(
     if race_state.laps >= TARGET_LAPS:
         genome.fitness += 250.0
         _remove_ai_driver(index, cars, genome_refs, nets, race_states)
+
+
+def _apply_ai_outputs(car: Car, outputs: Sequence[float]) -> None:
+    car.move(
+        forward=outputs[0] > 0.5,
+        backward=outputs[1] > 0.5,
+        left=outputs[2] > 0.5,
+        right=outputs[3] > 0.5,
+    )
 
 
 def _remove_ai_driver(
