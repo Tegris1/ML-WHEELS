@@ -7,19 +7,15 @@ from collections.abc import Sequence
 import pygame
 
 from game.config import AI_COLOR, FPS, GAME_OVER, HEIGHT, TEXT, WIDTH
-from game.logic.race import (
-    RaceState,
-    advance_race_state,
-    car_hits_wall,
-    next_checkpoint_center,
-)
+from game.logic.race import RaceState, advance_race_state, car_hits_wall, next_checkpoint_center
 from game.logic.sensors import read_car_sensors
 from game.models.car import Car
+from game.models.track import create_ai_car
 from game.paths import NEAT_CONFIG_PATH, WINNER_PATH
 from game.rendering.car import draw_car, draw_car_sensors
 from game.rendering.track import build_track_mask, draw_track
 
-MAX_STEPS = 1800
+MAX_STEPS = 300
 TARGET_LAPS = 3
 
 
@@ -56,13 +52,6 @@ def network_inputs(car: Car, race_state: RaceState, track_mask: pygame.mask.Mask
         heading_to_target(car, target_x, target_y),
         distance_to_target(car, target_x, target_y),
     ]
-
-
-def create_ai_car() -> Car:
-    return Car(
-        start_x=WIDTH // 2 + 70,
-        start_y=145,
-    )
 
 
 def run_training(generations: int = 50) -> None:
@@ -249,18 +238,10 @@ def _remove_ai_driver(
 
 
 def _training_message(font: pygame.font.Font, car_count: int, steps: int) -> pygame.Surface:
-    return font.render(
-        f"Training cars: {car_count}  Step: {steps}/{MAX_STEPS}",
-        True,
-        TEXT,
-    )
+    return font.render(f"Training cars: {car_count}  Step: {steps}/{MAX_STEPS}", True, TEXT)
 
 
-def _watch_message(
-    font: pygame.font.Font,
-    race_state: RaceState,
-    crashed: bool,
-) -> pygame.Surface:
+def _watch_message(font: pygame.font.Font, race_state: RaceState, crashed: bool) -> pygame.Surface:
     if crashed:
         return font.render("Winner crashed. Press R to retry.", True, GAME_OVER)
     return font.render(f"AI laps: {race_state.laps}", True, TEXT)

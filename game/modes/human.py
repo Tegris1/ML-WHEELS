@@ -4,15 +4,10 @@ from collections.abc import Mapping
 
 import pygame
 
-from game.config import (
-    FPS,
-    HEIGHT,
-    PLAYER_ONE,
-    PLAYER_TWO,
-    WIDTH,
-)
+from game.config import FPS, HEIGHT, PLAYER_ONE, PLAYER_TWO, WIDTH
 from game.logic.race import RaceState, advance_race_state, car_hits_wall, cars_collide
 from game.models.car import Car
+from game.models.track import create_player_cars
 from game.rendering.car import draw_car
 from game.rendering.track import build_track_mask, draw_track
 from game.rendering.ui import draw_ui
@@ -29,18 +24,6 @@ PLAYER_TWO_CONTROLS = {
     "left": pygame.K_LEFT,
     "right": pygame.K_RIGHT,
 }
-
-
-def create_player_cars() -> tuple[Car, Car]:
-    player_one = Car(
-        start_x=WIDTH // 2 + 45,
-        start_y=145,
-    )
-    player_two = Car(
-        start_x=WIDTH // 2 + 95,
-        start_y=145,
-    )
-    return player_one, player_two
 
 
 def run_human_game() -> None:
@@ -67,20 +50,8 @@ def run_human_game() -> None:
                 player_two_state = RaceState()
 
         keys = pygame.key.get_pressed()
-        _update_player_car(
-            player_one,
-            player_one_state,
-            keys,
-            PLAYER_ONE_CONTROLS,
-            track_mask,
-        )
-        _update_player_car(
-            player_two,
-            player_two_state,
-            keys,
-            PLAYER_TWO_CONTROLS,
-            track_mask,
-        )
+        _update_player_car(player_one, player_one_state, keys, PLAYER_ONE_CONTROLS, track_mask)
+        _update_player_car(player_two, player_two_state, keys, PLAYER_TWO_CONTROLS, track_mask)
         _handle_player_collision(player_one, player_two, player_one_state, player_two_state)
 
         draw_track(screen)
