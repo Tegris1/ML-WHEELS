@@ -4,6 +4,7 @@ from collections.abc import Mapping
 
 import pygame
 
+from game.app_result import AppResult, QUIT, RETURN_TO_MENU
 from game.config import (
     FPS,
     HEIGHT,
@@ -43,7 +44,7 @@ def create_player_cars() -> tuple[Car, Car]:
     return player_one, player_two
 
 
-def run_human_game() -> None:
+def run_human_game() -> AppResult:
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("2D Racing Game")
@@ -58,8 +59,9 @@ def run_human_game() -> None:
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit()
-                return
+                return QUIT
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                return RETURN_TO_MENU
             if _restart_requested(event, player_one_state, player_two_state):
                 player_one.reset()
                 player_two.reset()

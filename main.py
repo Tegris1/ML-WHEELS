@@ -1,4 +1,4 @@
-from game.cli import main
+from game.app import main
 
 
 if __name__ == "__main__":
