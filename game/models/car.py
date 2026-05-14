@@ -8,7 +8,7 @@ class Car:
         self,
         start_x: float,
         start_y: float,
-        start_angle: float = -90,
+        start_angle: float = 0,
     ) -> None:
         self.width = 22
         self.height = 38
