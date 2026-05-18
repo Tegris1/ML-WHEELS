@@ -15,6 +15,7 @@ ACTION_QUIT = "quit"
 MODE_PLAY = "play"
 MODE_TRAIN = "train"
 MODE_WATCH = "watch"
+MODE_EDIT_TRACK = "edit_track"
 
 
 @dataclass
@@ -107,6 +108,8 @@ class MainMenu:
                 self.mode = MODE_TRAIN
             elif event.key in (pygame.K_3, pygame.K_KP3):
                 self.mode = MODE_WATCH
+            elif event.key in (pygame.K_4, pygame.K_KP4):
+                self.mode = MODE_EDIT_TRACK
 
         for mode, button in self._mode_buttons():
             if button.handle_event(event):
@@ -168,6 +171,7 @@ class MainMenu:
             MODE_PLAY: "Two local players: WASD and arrows.",
             MODE_TRAIN: "NEAT training with selected generation limits.",
             MODE_WATCH: "Replay saved winner from winner.pkl.",
+            MODE_EDIT_TRACK: "Draw and save a custom track layout.",
         }
         description = text_font.render(descriptions[self.mode], True, theme.TEXT_MUTED)
         screen.blit(description, description.get_rect(center=(WIDTH // 2, 318)))
@@ -197,6 +201,16 @@ class MainMenu:
             self.training_target_laps.draw(screen, text_font, heading_font)
             return
 
+        if self.mode == MODE_EDIT_TRACK:
+            lines = [
+                "Left-drag to sketch the track centerline.",
+                "Use [ and ] to change width, Enter to save, D for default track.",
+            ]
+            for index, line in enumerate(lines):
+                text = text_font.render(line, True, theme.TEXT_MUTED)
+                screen.blit(text, text.get_rect(center=(WIDTH // 2, 410 + index * 34)))
+            return
+
         self.watch_sensors.draw(screen, text_font, heading_font)
 
     def _mode_buttons(self) -> list[tuple[str, Button]]:
@@ -204,12 +218,13 @@ class MainMenu:
             (MODE_PLAY, "Play"),
             (MODE_TRAIN, "Train AI"),
             (MODE_WATCH, "Watch AI"),
+            (MODE_EDIT_TRACK, "Edit Track"),
         ]
         return [
             (
                 mode,
                 Button(
-                    rect=pygame.Rect(250 + index * 180, 245, 150, 52),
+                    rect=pygame.Rect(160 + index * 170, 245, 150, 52),
                     label=label,
                     selected=self.mode == mode,
                 ),

@@ -11,7 +11,6 @@ from game.config import AI_COLOR, FPS, GAME_OVER, HEIGHT, TEXT, WIDTH
 from game.logic.race import RaceState, advance_race_state, car_hits_wall, next_checkpoint_center
 from game.logic.sensors import read_car_sensors
 from game.modes.settings import TrainingSettings, WatchSettings
-from game.models.car import Car
 from game.models.track import create_ai_car
 from game.paths import NEAT_CONFIG_PATH, WINNER_PATH
 from game.rendering.car import draw_car, draw_car_sensors
@@ -56,13 +55,6 @@ def network_inputs(car: Car, race_state: RaceState, track_mask: pygame.mask.Mask
         heading_to_target(car, target_x, target_y),
         distance_to_target(car, target_x, target_y),
     ]
-
-
-def create_ai_car() -> Car:
-    return Car(
-        start_x=WIDTH // 2 + 70,
-        start_y=145,
-    )
 
 
 def run_training(settings: TrainingSettings | None = None) -> AppResult:
