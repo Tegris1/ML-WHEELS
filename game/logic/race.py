@@ -4,8 +4,9 @@ from dataclasses import dataclass
 
 import pygame
 
-from game.config import CHECKPOINTS, FINISH_LINE, HEIGHT, WIDTH
+from game.config import HEIGHT, WIDTH
 from game.models.car import Car
+from game.models import track as track_model
 
 
 @dataclass
@@ -13,8 +14,17 @@ class RaceState:
     laps: int = 0
     checkpoint_index: int = 0
     finish_armed: bool = False
-    in_finish: bool = True
+    in_finish: bool = False
     crashed: bool = False
+    item: object | None = None
+
+    def reset(self) -> None:
+        self.laps = 0
+        self.checkpoint_index = 0
+        self.finish_armed = False
+        self.in_finish = False
+        self.crashed = False
+        self.item = None
 
 
 def car_hits_wall(car: Car, track_mask: pygame.mask.Mask) -> bool:
@@ -28,53 +38,51 @@ def car_hits_wall(car: Car, track_mask: pygame.mask.Mask) -> bool:
 
 
 def cars_collide(first_car: Car, second_car: Car) -> bool:
-    first_mask = _car_collision_mask(first_car)
-    second_mask = _car_collision_mask(second_car)
+    first_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    second_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    pygame.draw.polygon(first_surface, (255, 255, 255), [(int(x), int(y)) for x, y in first_car.corners()])
+    pygame.draw.polygon(second_surface, (255, 255, 255), [(int(x), int(y)) for x, y in second_car.corners()])
+    first_mask = pygame.mask.from_surface(first_surface)
+    second_mask = pygame.mask.from_surface(second_surface)
     return first_mask.overlap(second_mask, (0, 0)) is not None
 
 
 def advance_race_state(car: Car, state: RaceState) -> tuple[bool, bool]:
+    checkpoint_index = state.checkpoint_index
+    finish_armed = state.finish_armed
+    previous_in_finish = state.in_finish
     car_point = (int(car.x), int(car.y))
+
     reached_checkpoint = False
     completed_lap = False
 
-    if _reached_next_checkpoint(car_point, state):
-        state.checkpoint_index += 1
+    active_track = track_model.ACTIVE_TRACK
+
+    if checkpoint_index < len(active_track.checkpoints) and active_track.checkpoints[checkpoint_index].contains(car_point):
+        checkpoint_index += 1
         reached_checkpoint = True
 
-    in_finish = FINISH_LINE.collidepoint(car_point)
-    if state.checkpoint_index == len(CHECKPOINTS):
-        state.finish_armed = True
+    in_finish = active_track.finish_line.contains(car_point)
+    if checkpoint_index == len(active_track.checkpoints):
+        finish_armed = True
 
-    if state.finish_armed and in_finish and not state.in_finish:
+    if finish_armed and in_finish and not previous_in_finish:
         state.laps += 1
-        state.checkpoint_index = 0
-        state.finish_armed = False
+        checkpoint_index = 0
+        finish_armed = False
         completed_lap = True
 
+    state.checkpoint_index = checkpoint_index
+    state.finish_armed = finish_armed
     state.in_finish = in_finish
     return reached_checkpoint, completed_lap
 
 
 def next_checkpoint_center(state: RaceState) -> tuple[float, float]:
-    if state.checkpoint_index >= len(CHECKPOINTS):
-        target = FINISH_LINE
+    active_track = track_model.ACTIVE_TRACK
+
+    if state.checkpoint_index >= len(active_track.checkpoints):
+        target = active_track.finish_line.center
     else:
-        target = CHECKPOINTS[state.checkpoint_index]
-    return float(target.centerx), float(target.centery)
-
-
-def _reached_next_checkpoint(car_point: tuple[int, int], state: RaceState) -> bool:
-    if state.checkpoint_index >= len(CHECKPOINTS):
-        return False
-    return CHECKPOINTS[state.checkpoint_index].collidepoint(car_point)
-
-
-def _car_collision_mask(car: Car) -> pygame.mask.Mask:
-    surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-    pygame.draw.polygon(
-        surface,
-        (255, 255, 255),
-        [(int(x), int(y)) for x, y in car.corners()],
-    )
-    return pygame.mask.from_surface(surface)
+        target = active_track.checkpoints[state.checkpoint_index].center
+    return float(target[0]), float(target[1])

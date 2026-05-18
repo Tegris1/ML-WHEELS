@@ -1,0 +1,308 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+import json
+import math
+
+import pygame
+
+from game.config import (
+    AI_COLOR,
+    CHECKPOINT_COUNT,
+    DEFAULT_START_INDEX,
+    DEFAULT_TRACK_CENTER,
+    DEFAULT_TRACK_SAMPLE_COUNT,
+    DEFAULT_TRACK_WIDTH,
+    MAX_TRACK_WIDTH,
+    MIN_TRACK_POINTS,
+    MIN_TRACK_WIDTH,
+    TRACK_SPACING,
+)
+from game.models.car import Car
+from game.paths import TRACK_LAYOUT_PATH
+
+
+@dataclass(frozen=True)
+class TrackZone:
+    center: tuple[float, float]
+    polygon: tuple[tuple[float, float], ...]
+    bounds: pygame.Rect
+
+    def contains(self, point: tuple[int, int]) -> bool:
+        return self.bounds.collidepoint(point) and _point_in_polygon(point, self.polygon)
+
+
+@dataclass(frozen=True)
+class TrackLayout:
+    centerline: tuple[tuple[float, float], ...]
+    track_width: int
+
+    def point_at(self, index: int) -> pygame.Vector2:
+        x, y = self.centerline[index % len(self.centerline)]
+        return pygame.Vector2(x, y)
+
+    def tangent_at(self, index: int) -> pygame.Vector2:
+        tangent = self.point_at(index + 1) - self.point_at(index - 1)
+        if tangent.length_squared() == 0:
+            tangent = self.point_at(index + 1) - self.point_at(index)
+        return tangent.normalize()
+
+    def normal_at(self, index: int) -> pygame.Vector2:
+        tangent = self.tangent_at(index)
+        return pygame.Vector2(-tangent.y, tangent.x)
+
+    @property
+    def edge_width(self) -> int:
+        return self.track_width + 12
+
+    @property
+    def start_index(self) -> int:
+        return min(DEFAULT_START_INDEX, len(self.centerline) - 1)
+
+    def zone_at(self, index: int, width: float, depth: float) -> TrackZone:
+        center = self.point_at(index)
+        tangent = self.tangent_at(index)
+        normal = self.normal_at(index)
+        half_width = width / 2
+        half_depth = depth / 2
+        polygon_vectors = (
+            center - (normal * half_width) - (tangent * half_depth),
+            center + (normal * half_width) - (tangent * half_depth),
+            center + (normal * half_width) + (tangent * half_depth),
+            center - (normal * half_width) + (tangent * half_depth),
+        )
+        polygon = tuple((point.x, point.y) for point in polygon_vectors)
+        min_x = min(point[0] for point in polygon)
+        max_x = max(point[0] for point in polygon)
+        min_y = min(point[1] for point in polygon)
+        max_y = max(point[1] for point in polygon)
+        return TrackZone(
+            center=(center.x, center.y),
+            polygon=polygon,
+            bounds=pygame.Rect(min_x, min_y, max_x - min_x, max_y - min_y).inflate(2, 2),
+        )
+
+    def finish_line(self) -> TrackZone:
+        return self.zone_at(0, self.track_width + 16, 30)
+
+    def checkpoints(self) -> tuple[TrackZone, ...]:
+        step = len(self.centerline) / (CHECKPOINT_COUNT + 1)
+        zones = []
+        for order in range(1, CHECKPOINT_COUNT + 1):
+            index = int(round(self.start_index + (step * order))) % len(self.centerline)
+            zones.append(self.zone_at(index, self.track_width + 10, 26))
+        return tuple(zones)
+
+    def start_pose(self, lane_offset: float) -> tuple[float, float, float]:
+        center = self.point_at(self.start_index)
+        tangent = self.tangent_at(self.start_index)
+        normal = self.normal_at(self.start_index)
+        start = center + (normal * lane_offset)
+        angle = math.degrees(math.atan2(tangent.y, tangent.x))
+        return start.x, start.y, angle
+
+
+@dataclass(frozen=True)
+class CompiledTrack:
+    layout: TrackLayout
+    surface: pygame.Surface
+    mask: pygame.mask.Mask
+    finish_line: TrackZone
+    checkpoints: tuple[TrackZone, ...]
+    player_one_start: tuple[float, float, float]
+    player_two_start: tuple[float, float, float]
+    ai_start: tuple[float, float, float]
+
+
+def _point_in_polygon(point: tuple[int, int], polygon: tuple[tuple[float, float], ...]) -> bool:
+    x, y = point
+    inside = False
+    previous_x, previous_y = polygon[-1]
+    for current_x, current_y in polygon:
+        intersects = (current_y > y) != (previous_y > y)
+        if intersects:
+            slope_x = (previous_x - current_x) * (y - current_y) / (previous_y - current_y) + current_x
+            if x < slope_x:
+                inside = not inside
+        previous_x, previous_y = current_x, current_y
+    return inside
+
+
+def _track_radius(theta: float) -> float:
+    return (
+        220
+        + 42 * math.sin((2 * theta) + 0.6)
+        + 28 * math.sin((5 * theta) - 1.1)
+        - 18 * math.cos((3 * theta) + 0.3)
+    )
+
+
+def create_default_layout() -> TrackLayout:
+    points = []
+    for index in range(DEFAULT_TRACK_SAMPLE_COUNT):
+        theta = (-math.pi / 2) + ((2 * math.pi * index) / DEFAULT_TRACK_SAMPLE_COUNT)
+        radius = _track_radius(theta)
+        points.append(
+            (
+                DEFAULT_TRACK_CENTER.x + math.cos(theta) * (radius * 1.12),
+                DEFAULT_TRACK_CENTER.y + math.sin(theta) * (radius * 1.02),
+            )
+        )
+    return TrackLayout(centerline=tuple(points), track_width=DEFAULT_TRACK_WIDTH)
+
+
+def _sanitize_points(points: list[tuple[float, float]]) -> list[pygame.Vector2]:
+    cleaned: list[pygame.Vector2] = []
+    for raw_x, raw_y in points:
+        point = pygame.Vector2(float(raw_x), float(raw_y))
+        if not cleaned or point.distance_to(cleaned[-1]) >= 2:
+            cleaned.append(point)
+    return cleaned
+
+
+def build_layout_from_path(points: list[tuple[float, float]], track_width: int) -> TrackLayout:
+    cleaned = _sanitize_points(points)
+    if len(cleaned) < 6:
+        raise ValueError("Draw a longer loop before saving.")
+
+    loop_points = cleaned[:]
+    if loop_points[0].distance_to(loop_points[-1]) > max(TRACK_SPACING * 1.5, track_width * 0.6):
+        loop_points.append(loop_points[0])
+
+    total_length = 0.0
+    for index in range(len(loop_points) - 1):
+        length = loop_points[index].distance_to(loop_points[index + 1])
+        if length != 0:
+            total_length += length
+
+    if total_length < 400:
+        raise ValueError("The track is too short.")
+
+    sample_count = max(MIN_TRACK_POINTS, min(int(total_length / TRACK_SPACING), 260))
+    if sample_count < MIN_TRACK_POINTS:
+        raise ValueError("The track needs more detail.")
+
+    sampled_points = []
+    traversed = 0.0
+    segment_index = 0
+    segment_start = loop_points[0]
+    segment_end = loop_points[1]
+    segment_length = max(segment_start.distance_to(segment_end), 1.0)
+
+    for sample_index in range(sample_count):
+        target_distance = (total_length * sample_index) / sample_count
+        while traversed + segment_length < target_distance and segment_index < len(loop_points) - 2:
+            traversed += segment_length
+            segment_index += 1
+            segment_start = loop_points[segment_index]
+            segment_end = loop_points[segment_index + 1]
+            segment_length = max(segment_start.distance_to(segment_end), 1.0)
+        progress = (target_distance - traversed) / segment_length
+        point = segment_start.lerp(segment_end, progress)
+        sampled_points.append((point.x, point.y))
+
+    return TrackLayout(
+        centerline=tuple(sampled_points),
+        track_width=max(MIN_TRACK_WIDTH, min(MAX_TRACK_WIDTH, int(track_width))),
+    )
+
+
+def layout_path_points(layout: TrackLayout) -> list[tuple[int, int]]:
+    return [(int(x), int(y)) for x, y in layout.centerline]
+
+
+def compile_track(layout: TrackLayout) -> CompiledTrack:
+    from game.rendering.track import render_layout_mask, render_layout_surface
+
+    return CompiledTrack(
+        layout=layout,
+        surface=render_layout_surface(layout),
+        mask=render_layout_mask(layout),
+        finish_line=layout.finish_line(),
+        checkpoints=layout.checkpoints(),
+        player_one_start=layout.start_pose(-15),
+        player_two_start=layout.start_pose(15),
+        ai_start=layout.start_pose(0),
+    )
+
+
+def save_layout(layout: TrackLayout) -> None:
+    payload = {
+        "track_width": layout.track_width,
+        "centerline": [[round(x, 2), round(y, 2)] for x, y in layout.centerline],
+    }
+    TRACK_LAYOUT_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def load_layout() -> TrackLayout:
+    if not TRACK_LAYOUT_PATH.exists():
+        return create_default_layout()
+
+    try:
+        payload = json.loads(TRACK_LAYOUT_PATH.read_text(encoding="utf-8"))
+        centerline = payload["centerline"]
+        track_width = int(payload["track_width"])
+        return build_layout_from_path(centerline, track_width)
+    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+        return create_default_layout()
+
+
+ACTIVE_TRACK = compile_track(load_layout())
+
+
+def current_layout() -> TrackLayout:
+    return ACTIVE_TRACK.layout
+
+
+def reload_active_track() -> None:
+    global ACTIVE_TRACK
+    ACTIVE_TRACK = compile_track(load_layout())
+
+
+def use_layout(layout: TrackLayout, persist: bool = False) -> None:
+    global ACTIVE_TRACK
+    ACTIVE_TRACK = compile_track(layout)
+    if persist:
+        save_layout(layout)
+
+
+def use_default_track(persist: bool = False) -> None:
+    use_layout(create_default_layout(), persist=persist)
+
+
+def save_track_from_path(points: list[tuple[float, float]], track_width: int) -> TrackLayout:
+    layout = build_layout_from_path(points, track_width)
+    use_layout(layout, persist=True)
+    return layout
+
+
+def pickup_spawn_points(count: int = 8) -> list[tuple[float, float]]:
+    layout = ACTIVE_TRACK.layout
+    points = []
+    step = len(layout.centerline) / count
+    for order in range(count):
+        index = int(round(layout.start_index + (step * order))) % len(layout.centerline)
+        points.append(layout.centerline[index])
+    return points
+
+
+def create_player_cars() -> tuple[Car, Car]:
+    player_one = Car(
+        start_x=ACTIVE_TRACK.player_one_start[0],
+        start_y=ACTIVE_TRACK.player_one_start[1],
+        start_angle=ACTIVE_TRACK.player_one_start[2],
+    )
+    player_two = Car(
+        start_x=ACTIVE_TRACK.player_two_start[0],
+        start_y=ACTIVE_TRACK.player_two_start[1],
+        start_angle=ACTIVE_TRACK.player_two_start[2],
+    )
+    return player_one, player_two
+
+
+def create_ai_car(color: tuple[int, int, int] = AI_COLOR) -> Car:
+    return Car(
+        start_x=ACTIVE_TRACK.ai_start[0],
+        start_y=ACTIVE_TRACK.ai_start[1],
+        start_angle=ACTIVE_TRACK.ai_start[2],
+    )

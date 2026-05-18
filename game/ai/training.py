@@ -8,15 +8,11 @@ import pygame
 
 from game.app_result import AppResult, QUIT, RETURN_TO_MENU
 from game.config import AI_COLOR, FPS, GAME_OVER, HEIGHT, TEXT, WIDTH
-from game.logic.race import (
-    RaceState,
-    advance_race_state,
-    car_hits_wall,
-    next_checkpoint_center,
-)
+from game.logic.race import RaceState, advance_race_state, car_hits_wall, next_checkpoint_center
 from game.logic.sensors import read_car_sensors
 from game.modes.settings import TrainingSettings, WatchSettings
 from game.models.car import Car
+from game.models.track import create_ai_car
 from game.paths import NEAT_CONFIG_PATH, WINNER_PATH
 from game.rendering.car import draw_car, draw_car_sensors
 from game.rendering.track import build_track_mask, draw_track
@@ -281,11 +277,7 @@ def _training_message(
     )
 
 
-def _watch_message(
-    font: pygame.font.Font,
-    race_state: RaceState,
-    crashed: bool,
-) -> pygame.Surface:
+def _watch_message(font: pygame.font.Font, race_state: RaceState, crashed: bool) -> pygame.Surface:
     if crashed:
         return font.render("Winner crashed. Press R to retry.", True, GAME_OVER)
     return font.render(f"AI laps: {race_state.laps}", True, TEXT)

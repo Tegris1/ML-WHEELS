@@ -14,6 +14,7 @@ from game.config import (
 )
 from game.logic.race import RaceState, advance_race_state, car_hits_wall, cars_collide
 from game.models.car import Car
+from game.models.track import create_player_cars
 from game.rendering.car import draw_car
 from game.rendering.track import build_track_mask, draw_track
 from game.rendering.ui import draw_ui
@@ -69,20 +70,8 @@ def run_human_game() -> AppResult:
                 player_two_state = RaceState()
 
         keys = pygame.key.get_pressed()
-        _update_player_car(
-            player_one,
-            player_one_state,
-            keys,
-            PLAYER_ONE_CONTROLS,
-            track_mask,
-        )
-        _update_player_car(
-            player_two,
-            player_two_state,
-            keys,
-            PLAYER_TWO_CONTROLS,
-            track_mask,
-        )
+        _update_player_car(player_one, player_one_state, keys, PLAYER_ONE_CONTROLS, track_mask)
+        _update_player_car(player_two, player_two_state, keys, PLAYER_TWO_CONTROLS, track_mask)
         _handle_player_collision(player_one, player_two, player_one_state, player_two_state)
 
         draw_track(screen)
