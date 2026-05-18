@@ -4,7 +4,7 @@ import pygame
 
 from game.app_result import AppResult, RETURN_TO_MENU
 from game.config import HEIGHT, WIDTH
-from game.ui.main_menu import ACTION_QUIT, MODE_PLAY, MODE_TRAIN, MainMenu, MenuSelection
+from game.ui.main_menu import ACTION_QUIT, MODE_EDIT_TRACK, MODE_PLAY, MODE_TRAIN, MainMenu, MenuSelection
 
 
 def main() -> None:
@@ -43,6 +43,11 @@ def _run_selection(selection: MenuSelection) -> AppResult:
         from game.ai.training import run_training
 
         return run_training(selection.training)
+
+    if selection.mode == MODE_EDIT_TRACK:
+        from game.modes.track_editor import run_track_editor
+
+        return run_track_editor()
 
     from game.ai.training import watch_winner
 

@@ -14,8 +14,12 @@ class Car:
         self.height = 38
         self.max_speed = 6.5
         self.acceleration = 0.18
-        self.friction = 0.05
+        self.brake_force = 0.14
+        self.rolling_friction = 0.025
+        self.drag = 0.992
         self.turn_speed = 3.2
+        self.tire_grip = 0.22
+        self.max_lateral_grip = 0.28
         self.start_x = start_x
         self.start_y = start_y
         self.start_angle = start_angle
@@ -26,31 +30,60 @@ class Car:
         self.y = self.start_y
         self.angle = self.start_angle
         self.speed = 0.0
+        self.velocity_x = 0.0
+        self.velocity_y = 0.0
 
     def move(self, forward: bool, backward: bool, left: bool, right: bool) -> None:
+        heading_x = math.cos(math.radians(self.angle))
+        heading_y = math.sin(math.radians(self.angle))
+        right_x = -heading_y
+        right_y = heading_x
+
+        forward_speed = self.velocity_x * heading_x + self.velocity_y * heading_y
+
         if forward:
-            self.speed += self.acceleration
+            forward_speed += self.acceleration
         if backward:
-            self.speed -= self.acceleration * 0.8
+            if forward_speed > 0:
+                forward_speed = max(0.0, forward_speed - self.brake_force)
+            else:
+                forward_speed -= self.acceleration * 0.7
 
         if not (forward or backward):
-            if self.speed > 0:
-                self.speed = max(0, self.speed - self.friction)
-            elif self.speed < 0:
-                self.speed = min(0, self.speed + self.friction)
+            forward_speed *= 1.0 - self.rolling_friction
+            if abs(forward_speed) < 0.02:
+                forward_speed = 0.0
 
-        self.speed = max(-self.max_speed / 2, min(self.max_speed, self.speed))
+        forward_speed = max(-self.max_speed / 2, min(self.max_speed, forward_speed))
 
-        if abs(self.speed) > 0.2:
-            direction = 1 if self.speed >= 0 else -1
-            if left:
-                self.angle -= self.turn_speed * direction
-            if right:
-                self.angle += self.turn_speed * direction
+        turn_input = int(right) - int(left)
+        if turn_input and abs(forward_speed) > 0.15:
+            speed_ratio = min(abs(forward_speed) / self.max_speed, 1.0)
+            steer_scale = 0.35 + speed_ratio * 0.65
+            direction = 1 if forward_speed >= 0 else -1
+            self.angle += self.turn_speed * steer_scale * turn_input * direction
 
-        radians = math.radians(self.angle)
-        self.x += math.cos(radians) * self.speed
-        self.y += math.sin(radians) * self.speed
+        heading_x = math.cos(math.radians(self.angle))
+        heading_y = math.sin(math.radians(self.angle))
+        right_x = -heading_y
+        right_y = heading_x
+
+        lateral_speed = self.velocity_x * right_x + self.velocity_y * right_y
+        lateral_correction = -lateral_speed * self.tire_grip
+        lateral_correction = max(
+            -self.max_lateral_grip,
+            min(self.max_lateral_grip, lateral_correction),
+        )
+        lateral_speed += lateral_correction
+
+        self.velocity_x = heading_x * forward_speed + right_x * lateral_speed
+        self.velocity_y = heading_y * forward_speed + right_y * lateral_speed
+        self.velocity_x *= self.drag
+        self.velocity_y *= self.drag
+
+        self.x += self.velocity_x
+        self.y += self.velocity_y
+        self.speed = self.velocity_x * heading_x + self.velocity_y * heading_y
 
     def corners(self) -> list[tuple[float, float]]:
         radians = math.radians(self.angle)

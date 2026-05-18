@@ -13,7 +13,6 @@ from game.config import (
     WIDTH,
 )
 from game.logic.race import RaceState, advance_race_state, car_hits_wall, cars_collide
-from game.models.car import Car
 from game.models.track import create_player_cars
 from game.rendering.car import draw_car
 from game.rendering.track import build_track_mask, draw_track
@@ -31,20 +30,6 @@ PLAYER_TWO_CONTROLS = {
     "left": pygame.K_LEFT,
     "right": pygame.K_RIGHT,
 }
-
-
-def create_player_cars() -> tuple[Car, Car]:
-    player_one = Car(
-        start_x=WIDTH // 2 + 45,
-        start_y=145,
-    )
-    player_two = Car(
-        start_x=WIDTH // 2 + 95,
-        start_y=145,
-    )
-    return player_one, player_two
-
-
 def run_human_game() -> AppResult:
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))

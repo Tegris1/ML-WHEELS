@@ -9,7 +9,6 @@ import pygame
 from game.config import (
     AI_COLOR,
     CHECKPOINT_COUNT,
-    DEFAULT_START_INDEX,
     DEFAULT_TRACK_CENTER,
     DEFAULT_TRACK_SAMPLE_COUNT,
     DEFAULT_TRACK_WIDTH,
@@ -57,7 +56,7 @@ class TrackLayout:
 
     @property
     def start_index(self) -> int:
-        return min(DEFAULT_START_INDEX, len(self.centerline) - 1)
+        return 0
 
     def zone_at(self, index: int, width: float, depth: float) -> TrackZone:
         center = self.point_at(index)
