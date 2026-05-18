@@ -6,17 +6,21 @@ from collections.abc import Sequence
 
 import pygame
 
+from game.app_result import AppResult, QUIT, RETURN_TO_MENU
 from game.config import AI_COLOR, FPS, GAME_OVER, HEIGHT, TEXT, WIDTH
 from game.logic.race import RaceState, advance_race_state, car_hits_wall, next_checkpoint_center
 from game.logic.sensors import read_car_sensors
+from game.modes.settings import TrainingSettings, WatchSettings
 from game.models.car import Car
 from game.models.track import create_ai_car
 from game.paths import NEAT_CONFIG_PATH, WINNER_PATH
 from game.rendering.car import draw_car, draw_car_sensors
 from game.rendering.track import build_track_mask, draw_track
 
-MAX_STEPS = 300
-TARGET_LAPS = 3
+
+class TrainingStopped(Exception):
+    def __init__(self, result: AppResult) -> None:
+        self.result = result
 
 
 def require_neat():
@@ -54,7 +58,15 @@ def network_inputs(car: Car, race_state: RaceState, track_mask: pygame.mask.Mask
     ]
 
 
-def run_training(generations: int = 50) -> None:
+def create_ai_car() -> Car:
+    return Car(
+        start_x=WIDTH // 2 + 70,
+        start_y=145,
+    )
+
+
+def run_training(settings: TrainingSettings | None = None) -> AppResult:
+    settings = settings or TrainingSettings()
     neat = require_neat()
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -78,7 +90,7 @@ def run_training(generations: int = 50) -> None:
             genome_refs.append(genome)
             race_states.append(RaceState())
 
-        _run_generation_loop(
+        result = _run_generation_loop(
             cars=cars,
             clock=clock,
             font=font,
@@ -86,22 +98,30 @@ def run_training(generations: int = 50) -> None:
             nets=nets,
             race_states=race_states,
             screen=screen,
+            settings=settings,
             track_mask=track_mask,
         )
+        if result is not None:
+            raise TrainingStopped(result)
 
     population = neat.Population(neat_config)
     population.add_reporter(neat.StdOutReporter(True))
     population.add_reporter(neat.StatisticsReporter())
 
-    winner = population.run(eval_genomes, generations)
+    try:
+        winner = population.run(eval_genomes, settings.generations)
+    except TrainingStopped as stop:
+        return stop.result
+
     WINNER_PATH.write_bytes(pickle.dumps(winner))
-    pygame.quit()
+    return RETURN_TO_MENU
 
 
-def watch_winner() -> None:
+def watch_winner(settings: WatchSettings | None = None) -> AppResult:
+    settings = settings or WatchSettings()
     neat = require_neat()
     if not WINNER_PATH.exists():
-        raise SystemExit("No saved genome found. Train first with 'python main.py train'.")
+        raise SystemExit("No saved genome found. Train first from the main menu.")
 
     winner = pickle.loads(WINNER_PATH.read_bytes())
     neat_config = _load_neat_config(neat)
@@ -121,8 +141,9 @@ def watch_winner() -> None:
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit()
-                return
+                return QUIT
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                return RETURN_TO_MENU
             if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
                 car.reset()
                 race_state = RaceState()
@@ -137,7 +158,8 @@ def watch_winner() -> None:
 
         draw_track(screen)
         draw_car(car, screen, AI_COLOR)
-        draw_car_sensors(car, screen, track_mask)
+        if settings.show_sensors:
+            draw_car_sensors(car, screen, track_mask)
         screen.blit(_watch_message(font, race_state, crashed), (20, 20))
         pygame.display.flip()
         clock.tick(FPS)
@@ -161,25 +183,29 @@ def _run_generation_loop(
     nets: list,
     race_states: list[RaceState],
     screen: pygame.Surface,
+    settings: TrainingSettings,
     track_mask: pygame.mask.Mask,
-) -> None:
+) -> AppResult | None:
     steps = 0
-    while cars and steps < MAX_STEPS:
+    while cars and steps < settings.max_steps:
         steps += 1
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit()
-                raise SystemExit
+                return QUIT
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                return RETURN_TO_MENU
 
         for index in range(len(cars) - 1, -1, -1):
-            _update_ai_driver(index, cars, genome_refs, nets, race_states, track_mask)
+            _update_ai_driver(index, cars, genome_refs, nets, race_states, settings, track_mask)
 
         draw_track(screen)
         for car in cars:
             draw_car(car, screen, AI_COLOR)
-        screen.blit(_training_message(font, len(cars), steps), (20, 20))
+        screen.blit(_training_message(font, len(cars), steps, settings.max_steps), (20, 20))
         pygame.display.flip()
         clock.tick(FPS)
+
+    return None
 
 
 def _update_ai_driver(
@@ -188,6 +214,7 @@ def _update_ai_driver(
     genome_refs: list,
     nets: list,
     race_states: list[RaceState],
+    settings: TrainingSettings,
     track_mask: pygame.mask.Mask,
 ) -> None:
     car = cars[index]
@@ -210,7 +237,7 @@ def _update_ai_driver(
         genome.fitness += 100.0
     if car.speed < 0.15:
         genome.fitness -= 0.03
-    if race_state.laps >= TARGET_LAPS:
+    if race_state.laps >= settings.target_laps:
         genome.fitness += 250.0
         _remove_ai_driver(index, cars, genome_refs, nets, race_states)
 
@@ -237,8 +264,17 @@ def _remove_ai_driver(
     race_states.pop(index)
 
 
-def _training_message(font: pygame.font.Font, car_count: int, steps: int) -> pygame.Surface:
-    return font.render(f"Training cars: {car_count}  Step: {steps}/{MAX_STEPS}", True, TEXT)
+def _training_message(
+    font: pygame.font.Font,
+    car_count: int,
+    steps: int,
+    max_steps: int,
+) -> pygame.Surface:
+    return font.render(
+        f"Training cars: {car_count}  Step: {steps}/{max_steps}  Esc: menu",
+        True,
+        TEXT,
+    )
 
 
 def _watch_message(font: pygame.font.Font, race_state: RaceState, crashed: bool) -> pygame.Surface:
