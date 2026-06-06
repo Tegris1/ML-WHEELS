@@ -176,3 +176,46 @@ class Selector:
         pygame.draw.rect(surface, color, rect, border_radius=6)
         text = font.render(label, True, theme.TEXT)
         surface.blit(text, text.get_rect(center=rect.center))
+
+
+@dataclass
+class TextInput:
+    label: str
+    text: str
+    rect: pygame.Rect
+    active: bool = False
+
+    def handle_event(self, event: pygame.event.Event) -> None:
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self.rect.collidepoint(event.pos):
+                self.active = True
+            else:
+                self.active = False
+        if event.type == pygame.KEYDOWN and self.active:
+            if event.key == pygame.K_BACKSPACE:
+                self.text = self.text[:-1]
+            elif event.key == pygame.K_RETURN:
+                self.active = False
+            else:
+                # Add a reasonable max length, e.g., 15 chars
+                if len(self.text) < 15 and event.unicode.isprintable():
+                    self.text += event.unicode
+
+    def draw(
+        self,
+        surface: pygame.Surface,
+        label_font: pygame.font.Font,
+        value_font: pygame.font.Font,
+    ) -> None:
+        label = label_font.render(self.label, True, theme.TEXT_MUTED)
+        surface.blit(label, (self.rect.left, self.rect.top - 28))
+
+        color = theme.ACCENT_DARK if self.active else theme.PANEL
+        pygame.draw.rect(surface, color, self.rect, border_radius=8)
+        border_color = theme.ACCENT if self.active else theme.BORDER
+        pygame.draw.rect(surface, border_color, self.rect, 2, border_radius=8)
+
+        text_surface = value_font.render(self.text + ("_" if self.active else ""), True, theme.TEXT)
+        # Center the text inside the rect
+        text_rect = text_surface.get_rect(center=self.rect.center)
+        surface.blit(text_surface, text_rect)
