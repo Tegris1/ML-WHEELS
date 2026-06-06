@@ -55,16 +55,19 @@ class MainMenu:
         self.training_target_laps = Stepper(
             "Target laps", 3, 1, 10, 1, pygame.Rect(560, 380, 280, 58)
         )
+        
+        # AI Profile Selector
         self.ai_profile = self._create_profile_selector(
             "AI Profile", pygame.Rect(560, 465, 280, 58)
         )
+        
         self.profile_name_input = TextInput(
-            "Profile Name", "", pygame.Rect(360, 550, 280, 58)
+            "Profile Name", "", pygame.Rect(160, 550, 280, 58)
         )
         self._update_profile_name_input()
 
         # Advanced Rewards
-        self.advanced_rewards_toggle = Toggle("Advanced rewards", False, pygame.Rect(160, 550, 280, 58))
+        self.advanced_rewards_toggle = Toggle("Advanced rewards", False, pygame.Rect(560, 550, 280, 58))
         self.speed_reward = Stepper("Speed rew (x100)", 2, 0, 10, 1, pygame.Rect(160, 380, 280, 58))
         self.wall_penalty = Stepper("Wall pen", 2, 0, 10, 1, pygame.Rect(160, 465, 280, 58))
         self.checkpoint_reward = Stepper("Checkpoint rew", 20, 0, 100, 5, pygame.Rect(160, 550, 280, 58))
@@ -72,7 +75,7 @@ class MainMenu:
         self.stuck_penalty = Stepper("Stuck pen (x100)", 3, 0, 10, 1, pygame.Rect(560, 465, 280, 58))
         self.finish_reward = Stepper("Finish rew", 250, 0, 1000, 50, pygame.Rect(560, 550, 280, 58))
 
-        self.watch_sensors = Toggle("AI sensors", True, pygame.Rect(360, 390, 280, 58))
+        self.watch_sensors = Toggle("AI sensors", True, pygame.Rect(160, 380, 280, 58))
         self.status_message: str | None = None
         self._action: str | None = None
 
@@ -171,7 +174,14 @@ class MainMenu:
                 self.training_generations.handle_event(event)
                 self.training_max_steps.handle_event(event)
                 self.training_target_laps.handle_event(event)
+                
+                # Handling AI profile in its Train rect
+                original_profile_rect = self.ai_profile.rect
+                self.ai_profile.rect = pygame.Rect(560, 465, 280, 58)
                 self.ai_profile.handle_event(event)
+                self.ai_profile.rect = original_profile_rect
+
+                self.advanced_rewards_toggle.rect = pygame.Rect(560, 550, 280, 58)
                 self.advanced_rewards_toggle.handle_event(event)
                 
                 if old_index != self.ai_profile.selected_index:
@@ -183,14 +193,18 @@ class MainMenu:
                 self.lap_reward.handle_event(event)
                 self.stuck_penalty.handle_event(event)
                 self.finish_reward.handle_event(event)
-                original_rect = self.advanced_rewards_toggle.rect
+                
                 self.advanced_rewards_toggle.rect = pygame.Rect(360, 620, 280, 40)
                 self.advanced_rewards_toggle.handle_event(event)
-                self.advanced_rewards_toggle.rect = original_rect
 
         elif self.mode == MODE_WATCH:
             self.watch_sensors.handle_event(event)
+            
+            # Handling AI profile in its Watch rect
+            original_profile_rect = self.ai_profile.rect
+            self.ai_profile.rect = pygame.Rect(560, 380, 280, 58)
             self.ai_profile.handle_event(event)
+            self.ai_profile.rect = original_profile_rect
 
     def _refresh_selectors(self):
         # Keeps selected indices but refreshes names
@@ -292,9 +306,15 @@ class MainMenu:
                 self.training_generations.draw(screen, text_font, heading_font)
                 self.training_max_steps.draw(screen, text_font, heading_font)
                 self.training_target_laps.draw(screen, text_font, heading_font)
+                
+                original_profile_rect = self.ai_profile.rect
+                self.ai_profile.rect = pygame.Rect(560, 465, 280, 58)
                 self.ai_profile.draw(screen, text_font, heading_font)
+                self.ai_profile.rect = original_profile_rect
+
                 self.profile_name_input.draw(screen, text_font, heading_font)
-                self.advanced_rewards_toggle.rect = pygame.Rect(360, 620, 280, 40)
+                
+                self.advanced_rewards_toggle.rect = pygame.Rect(560, 550, 280, 58)
                 self.advanced_rewards_toggle.draw(screen, text_font, heading_font)
             else:
                 self.speed_reward.draw(screen, text_font, heading_font)
@@ -303,6 +323,7 @@ class MainMenu:
                 self.lap_reward.draw(screen, text_font, heading_font)
                 self.stuck_penalty.draw(screen, text_font, heading_font)
                 self.finish_reward.draw(screen, text_font, heading_font)
+                
                 self.advanced_rewards_toggle.rect = pygame.Rect(360, 620, 280, 40)
                 self.advanced_rewards_toggle.draw(screen, text_font, heading_font)
             return
@@ -317,8 +338,15 @@ class MainMenu:
                 screen.blit(text, text.get_rect(center=(WIDTH // 2, 410 + index * 34)))
             return
 
+        # MODE_WATCH layout
+        original_profile_rect = self.ai_profile.rect
+        self.ai_profile.rect = pygame.Rect(560, 380, 280, 58)
+        
         self.watch_sensors.draw(screen, text_font, heading_font)
         self.ai_profile.draw(screen, text_font, heading_font)
+        
+        self.ai_profile.rect = original_profile_rect
+
 
     def _mode_buttons(self) -> list[tuple[str, Button]]:
         labels = [
