@@ -12,7 +12,7 @@ from game.logic.race import RaceState, advance_race_state, car_hits_wall, next_c
 from game.logic.sensors import read_car_sensors
 from game.modes.settings import TrainingSettings, WatchSettings
 from game.models.track import create_ai_car
-from game.paths import NEAT_CONFIG_PATH, WINNER_PATH
+from game.paths import NEAT_CONFIG_PATH, get_winner_path
 from game.rendering.car import draw_car, draw_car_sensors
 from game.rendering.track import build_track_mask, draw_track
 
@@ -105,17 +105,19 @@ def run_training(settings: TrainingSettings | None = None) -> AppResult:
     except TrainingStopped as stop:
         return stop.result
 
-    WINNER_PATH.write_bytes(pickle.dumps(winner))
+    winner_path = get_winner_path(settings.profile_index)
+    winner_path.write_bytes(pickle.dumps(winner))
     return RETURN_TO_MENU
 
 
 def watch_winner(settings: WatchSettings | None = None) -> AppResult:
     settings = settings or WatchSettings()
     neat = require_neat()
-    if not WINNER_PATH.exists():
-        raise SystemExit("No saved genome found. Train first from the main menu.")
+    winner_path = get_winner_path(settings.profile_index)
+    if not winner_path.exists():
+        raise SystemExit(f"No saved genome found for profile {settings.profile_index + 1}. Train first from the main menu.")
 
-    winner = pickle.loads(WINNER_PATH.read_bytes())
+    winner = pickle.loads(winner_path.read_bytes())
     neat_config = _load_neat_config(neat)
     net = neat.nn.FeedForwardNetwork.create(winner, neat_config)
 

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import pygame
 
-from game.config import FPS, HEIGHT, WIDTH
+from game.config import AI_PROFILES, FPS, HEIGHT, WIDTH
 from game.modes.settings import TrainingSettings, WatchSettings
 from game.ui import theme
 from game.ui.controls import Button, Stepper, Toggle
@@ -29,28 +29,16 @@ class MainMenu:
     def __init__(self) -> None:
         self.mode = MODE_PLAY
         self.training_generations = Stepper(
-            "Generations",
-            50,
-            1,
-            500,
-            5,
-            pygame.Rect(360, 380, 280, 58),
+            "Generations", 50, 1, 500, 5, pygame.Rect(160, 380, 280, 58)
         )
         self.training_max_steps = Stepper(
-            "Max steps",
-            1800,
-            300,
-            5000,
-            100,
-            pygame.Rect(360, 465, 280, 58),
+            "Max steps", 1800, 300, 5000, 100, pygame.Rect(160, 465, 280, 58)
         )
         self.training_target_laps = Stepper(
-            "Target laps",
-            3,
-            1,
-            10,
-            1,
-            pygame.Rect(360, 550, 280, 58),
+            "Target laps", 3, 1, 10, 1, pygame.Rect(560, 380, 280, 58)
+        )
+        self.ai_profile = Stepper(
+            "AI Profile", 1, 1, AI_PROFILES, 1, pygame.Rect(560, 465, 280, 58)
         )
         self.watch_sensors = Toggle("AI sensors", True, pygame.Rect(360, 390, 280, 58))
         self.status_message: str | None = None
@@ -81,8 +69,12 @@ class MainMenu:
                 generations=self.training_generations.value,
                 max_steps=self.training_max_steps.value,
                 target_laps=self.training_target_laps.value,
+                profile_index=self.ai_profile.value - 1,
             ),
-            watch=WatchSettings(show_sensors=self.watch_sensors.value),
+            watch=WatchSettings(
+                show_sensors=self.watch_sensors.value,
+                profile_index=self.ai_profile.value - 1,
+            ),
         )
 
     def set_status(self, message: str) -> None:
@@ -123,8 +115,10 @@ class MainMenu:
             self.training_generations.handle_event(event)
             self.training_max_steps.handle_event(event)
             self.training_target_laps.handle_event(event)
+            self.ai_profile.handle_event(event)
         elif self.mode == MODE_WATCH:
             self.watch_sensors.handle_event(event)
+            self.ai_profile.handle_event(event)
 
     def _draw(
         self,
@@ -148,7 +142,9 @@ class MainMenu:
         text_font: pygame.font.Font,
     ) -> None:
         title = title_font.render("ML-WHEELS", True, theme.TEXT)
-        subtitle = text_font.render("Select mode and run parameters", True, theme.TEXT_MUTED)
+        subtitle = text_font.render(
+            "Select mode and run parameters", True, theme.TEXT_MUTED
+        )
         screen.blit(title, title.get_rect(center=(WIDTH // 2, 94)))
         screen.blit(subtitle, subtitle.get_rect(center=(WIDTH // 2, 142)))
         if self.status_message:
@@ -163,14 +159,14 @@ class MainMenu:
         button_font: pygame.font.Font,
     ) -> None:
         heading = heading_font.render("Mode", True, theme.TEXT)
-        screen.blit(heading, (250, 206))
+        screen.blit(heading, (160, 206))
         for _, button in self._mode_buttons():
             button.draw(screen, button_font)
 
         descriptions = {
             MODE_PLAY: "Two local players: WASD and arrows.",
             MODE_TRAIN: "NEAT training with selected generation limits.",
-            MODE_WATCH: "Replay saved winner from winner.pkl.",
+            MODE_WATCH: "Replay saved winner from a selected profile.",
             MODE_EDIT_TRACK: "Draw and save a custom track layout.",
         }
         description = text_font.render(descriptions[self.mode], True, theme.TEXT_MUTED)
@@ -183,7 +179,7 @@ class MainMenu:
         text_font: pygame.font.Font,
     ) -> None:
         heading = heading_font.render("Parameters", True, theme.TEXT)
-        screen.blit(heading, (250, 338))
+        screen.blit(heading, (160, 338))
 
         if self.mode == MODE_PLAY:
             lines = [
@@ -199,6 +195,7 @@ class MainMenu:
             self.training_generations.draw(screen, text_font, heading_font)
             self.training_max_steps.draw(screen, text_font, heading_font)
             self.training_target_laps.draw(screen, text_font, heading_font)
+            self.ai_profile.draw(screen, text_font, heading_font)
             return
 
         if self.mode == MODE_EDIT_TRACK:
@@ -212,6 +209,7 @@ class MainMenu:
             return
 
         self.watch_sensors.draw(screen, text_font, heading_font)
+        self.ai_profile.draw(screen, text_font, heading_font)
 
     def _mode_buttons(self) -> list[tuple[str, Button]]:
         labels = [

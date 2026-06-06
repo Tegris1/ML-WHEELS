@@ -1,4 +1,4 @@
 .venv/
 .idea/
 __pycache__/
-winner.pkl
+winner*.pkl
