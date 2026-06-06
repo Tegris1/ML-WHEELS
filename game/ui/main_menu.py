@@ -5,9 +5,18 @@ from dataclasses import dataclass
 import pygame
 
 from game.config import AI_PROFILES, FPS, HEIGHT, WIDTH
-from game.modes.settings import TrainingSettings, WatchSettings
+from game.modes.settings import (
+    PLAYER_TYPE_AI,
+    PLAYER_TYPE_EMPTY,
+    PLAYER_TYPE_HUMAN_1,
+    PLAYER_TYPE_HUMAN_2,
+    PlaySettings,
+    TrainingSettings,
+    WatchSettings,
+)
+from game.paths import get_winner_path
 from game.ui import theme
-from game.ui.controls import Button, Stepper, Toggle
+from game.ui.controls import Button, Selector, Stepper, Toggle
 
 ACTION_START = "start"
 ACTION_QUIT = "quit"
@@ -21,6 +30,7 @@ MODE_EDIT_TRACK = "edit_track"
 @dataclass
 class MenuSelection:
     mode: str
+    play: PlaySettings
     training: TrainingSettings
     watch: WatchSettings
 
@@ -28,6 +38,14 @@ class MenuSelection:
 class MainMenu:
     def __init__(self) -> None:
         self.mode = MODE_PLAY
+        self.player_one_selector = self._create_player_selector(
+            "Player 1", pygame.Rect(160, 380, 280, 58)
+        )
+        self.player_two_selector = self._create_player_selector(
+            "Player 2", pygame.Rect(560, 380, 280, 58)
+        )
+        self.play_collisions = Toggle("Collisions", True, pygame.Rect(360, 465, 280, 58))
+
         self.training_generations = Stepper(
             "Generations", 50, 1, 500, 5, pygame.Rect(160, 380, 280, 58)
         )
@@ -65,6 +83,7 @@ class MainMenu:
     def selection(self) -> MenuSelection:
         return MenuSelection(
             mode=self.mode,
+            play=self._play_settings(),
             training=TrainingSettings(
                 generations=self.training_generations.value,
                 max_steps=self.training_max_steps.value,
@@ -92,7 +111,8 @@ class MainMenu:
                 self._action = ACTION_QUIT
                 return
             if event.key == pygame.K_RETURN:
-                self._action = ACTION_START
+                if self._can_start():
+                    self._action = ACTION_START
                 return
             if event.key in (pygame.K_1, pygame.K_KP1):
                 self.mode = MODE_PLAY
@@ -108,10 +128,14 @@ class MainMenu:
                 self.mode = mode
 
         for action, button in self._action_buttons():
-            if button.handle_event(event):
+            if button.handle_event(event) and self._can_start():
                 self._action = action
 
-        if self.mode == MODE_TRAIN:
+        if self.mode == MODE_PLAY:
+            self.player_one_selector.handle_event(event)
+            self.player_two_selector.handle_event(event)
+            self.play_collisions.handle_event(event)
+        elif self.mode == MODE_TRAIN:
             self.training_generations.handle_event(event)
             self.training_max_steps.handle_event(event)
             self.training_target_laps.handle_event(event)
@@ -164,7 +188,7 @@ class MainMenu:
             button.draw(screen, button_font)
 
         descriptions = {
-            MODE_PLAY: "Two local players: WASD and arrows.",
+            MODE_PLAY: "Select player types for a local race.",
             MODE_TRAIN: "NEAT training with selected generation limits.",
             MODE_WATCH: "Replay saved winner from a selected profile.",
             MODE_EDIT_TRACK: "Draw and save a custom track layout.",
@@ -182,13 +206,14 @@ class MainMenu:
         screen.blit(heading, (160, 338))
 
         if self.mode == MODE_PLAY:
-            lines = [
-                "No parameters for local race.",
-                "Press Start, then Esc to return to this menu.",
-            ]
-            for index, line in enumerate(lines):
-                text = text_font.render(line, True, theme.TEXT_MUTED)
-                screen.blit(text, text.get_rect(center=(WIDTH // 2, 410 + index * 34)))
+            self.player_one_selector.draw(screen, text_font, heading_font)
+            self.player_two_selector.draw(screen, text_font, heading_font)
+            self.play_collisions.draw(screen, text_font, heading_font)
+            if not self._can_start():
+                warning = text_font.render(
+                    "At least one player must be selected.", True, theme.WARNING
+                )
+                screen.blit(warning, warning.get_rect(center=(WIDTH // 2, 550)))
             return
 
         if self.mode == MODE_TRAIN:
@@ -231,13 +256,14 @@ class MainMenu:
         ]
 
     def _action_buttons(self) -> list[tuple[str, Button]]:
+        can_start = self._can_start()
         return [
             (
                 ACTION_START,
                 Button(
                     rect=pygame.Rect(360, HEIGHT - 68, 130, 46),
                     label="Start",
-                    selected=True,
+                    selected=can_start,
                 ),
             ),
             (
@@ -248,3 +274,51 @@ class MainMenu:
                 ),
             ),
         ]
+
+    def _can_start(self) -> bool:
+        if self.mode != MODE_PLAY:
+            return True
+        return (
+            self.player_one_selector.options[self.player_one_selector.selected_index]
+            != "Empty"
+            or self.player_two_selector.options[self.player_two_selector.selected_index]
+            != "Empty"
+        )
+
+    def _create_player_selector(self, label: str, rect: pygame.Rect) -> Selector:
+        options = ["Empty", "Human 1", "Human 2"]
+        for i in range(AI_PROFILES):
+            if get_winner_path(i).exists():
+                options.append(f"AI {i + 1}")
+        return Selector(label, options, 0, rect)
+
+    def _play_settings(self) -> PlaySettings:
+        p1_option = self.player_one_selector.options[
+            self.player_one_selector.selected_index
+        ]
+        p2_option = self.player_two_selector.options[
+            self.player_two_selector.selected_index
+        ]
+        return PlaySettings(
+            player_one_type=self._get_player_type(p1_option),
+            player_two_type=self._get_player_type(p2_option),
+            player_one_ai_profile=self._get_ai_profile(p1_option),
+            player_two_ai_profile=self._get_ai_profile(p2_option),
+            collisions_enabled=self.play_collisions.value,
+        )
+
+    def _get_player_type(self, option: str) -> str:
+        if option == "Empty":
+            return PLAYER_TYPE_EMPTY
+        if option == "Human 1":
+            return PLAYER_TYPE_HUMAN_1
+        if option == "Human 2":
+            return PLAYER_TYPE_HUMAN_2
+        if option.startswith("AI"):
+            return PLAYER_TYPE_AI
+        raise ValueError(f"Unknown player type: {option}")
+
+    def _get_ai_profile(self, option: str) -> int | None:
+        if not option.startswith("AI"):
+            return None
+        return int(option.split(" ")[1]) - 1

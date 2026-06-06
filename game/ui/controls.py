@@ -121,3 +121,58 @@ class Toggle:
         value = "ON" if self.value else "OFF"
         text = value_font.render(value, True, theme.TEXT)
         surface.blit(text, (self.rect.left + 96, self.rect.centery - text.get_height() // 2))
+
+
+@dataclass
+class Selector:
+    label: str
+    options: list[str]
+    selected_index: int
+    rect: pygame.Rect
+
+    def handle_event(self, event: pygame.event.Event) -> None:
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            minus_rect, plus_rect = self._button_rects()
+            if minus_rect.collidepoint(event.pos):
+                self.selected_index = (self.selected_index - 1) % len(self.options)
+            elif plus_rect.collidepoint(event.pos):
+                self.selected_index = (self.selected_index + 1) % len(self.options)
+
+    def draw(
+        self,
+        surface: pygame.Surface,
+        label_font: pygame.font.Font,
+        value_font: pygame.font.Font,
+    ) -> None:
+        label = label_font.render(self.label, True, theme.TEXT_MUTED)
+        surface.blit(label, (self.rect.left, self.rect.top - 28))
+
+        pygame.draw.rect(surface, theme.PANEL, self.rect, border_radius=8)
+        pygame.draw.rect(surface, theme.BORDER, self.rect, 2, border_radius=8)
+
+        minus_rect, plus_rect = self._button_rects()
+        self._draw_small_button(surface, value_font, minus_rect, "<")
+        self._draw_small_button(surface, value_font, plus_rect, ">")
+
+        value = value_font.render(self.options[self.selected_index], True, theme.TEXT)
+        surface.blit(value, value.get_rect(center=self.rect.center))
+
+    def _button_rects(self) -> tuple[pygame.Rect, pygame.Rect]:
+        size = self.rect.height - 12
+        minus = pygame.Rect(self.rect.left + 6, self.rect.top + 6, size, size)
+        plus = pygame.Rect(self.rect.right - size - 6, self.rect.top + 6, size, size)
+        return minus, plus
+
+    def _draw_small_button(
+        self,
+        surface: pygame.Surface,
+        font: pygame.font.Font,
+        rect: pygame.Rect,
+        label: str,
+    ) -> None:
+        color = theme.BACKGROUND
+        if rect.collidepoint(pygame.mouse.get_pos()):
+            color = theme.PANEL_HOVER
+        pygame.draw.rect(surface, color, rect, border_radius=6)
+        text = font.render(label, True, theme.TEXT)
+        surface.blit(text, text.get_rect(center=rect.center))
