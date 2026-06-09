@@ -12,7 +12,7 @@ from game.logic.race import RaceState, advance_race_state, car_hits_wall, next_c
 from game.logic.sensors import read_car_sensors
 from game.modes.settings import TrainingSettings, WatchSettings
 from game.models.track import create_ai_car
-from game.paths import NEAT_CONFIG_PATH, WINNER_PATH
+from game.paths import NEAT_CONFIG_PATH, get_winner_path, get_winner_name_path
 from game.rendering.car import draw_car, draw_car_sensors
 from game.rendering.track import build_track_mask, draw_track
 
@@ -105,17 +105,27 @@ def run_training(settings: TrainingSettings | None = None) -> AppResult:
     except TrainingStopped as stop:
         return stop.result
 
-    WINNER_PATH.write_bytes(pickle.dumps(winner))
+    winner_path = get_winner_path(settings.profile_index)
+    winner_path.write_bytes(pickle.dumps(winner))
+    
+    # Save the custom name if provided, else clear it
+    name_path = get_winner_name_path(settings.profile_index)
+    if settings.profile_name.strip():
+        name_path.write_text(settings.profile_name.strip())
+    elif name_path.exists():
+        name_path.unlink()
+
     return RETURN_TO_MENU
 
 
 def watch_winner(settings: WatchSettings | None = None) -> AppResult:
     settings = settings or WatchSettings()
     neat = require_neat()
-    if not WINNER_PATH.exists():
-        raise SystemExit("No saved genome found. Train first from the main menu.")
+    winner_path = get_winner_path(settings.profile_index)
+    if not winner_path.exists():
+        raise SystemExit(f"No saved genome found for profile {settings.profile_index + 1}. Train first from the main menu.")
 
-    winner = pickle.loads(WINNER_PATH.read_bytes())
+    winner = pickle.loads(winner_path.read_bytes())
     neat_config = _load_neat_config(neat)
     net = neat.nn.FeedForwardNetwork.create(winner, neat_config)
 
@@ -215,22 +225,22 @@ def _update_ai_driver(
 
     outputs = nets[index].activate(network_inputs(car, race_state, track_mask))
     _apply_ai_outputs(car, outputs)
-    genome.fitness += max(car.speed, 0) * 0.02
+    genome.fitness += max(car.speed, 0) * settings.speed_reward
 
     if car_hits_wall(car, track_mask):
-        genome.fitness -= 2.0
+        genome.fitness -= settings.wall_penalty
         _remove_ai_driver(index, cars, genome_refs, nets, race_states)
         return
 
     reached_checkpoint, completed_lap = advance_race_state(car, race_state)
     if reached_checkpoint:
-        genome.fitness += 20.0
+        genome.fitness += settings.checkpoint_reward
     if completed_lap:
-        genome.fitness += 100.0
+        genome.fitness += settings.lap_reward
     if car.speed < 0.15:
-        genome.fitness -= 0.03
+        genome.fitness -= settings.stuck_penalty
     if race_state.laps >= settings.target_laps:
-        genome.fitness += 250.0
+        genome.fitness += settings.finish_reward
         _remove_ai_driver(index, cars, genome_refs, nets, race_states)
 
 

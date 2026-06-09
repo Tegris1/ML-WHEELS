@@ -10,19 +10,20 @@ def draw_ui(
     surface: pygame.Surface,
     font: pygame.font.Font,
     player_one_state: RaceState,
-    player_two_state: RaceState,
+    player_two_state: RaceState | None = None,
 ) -> None:
-    player_one_text = font.render(f"Blue laps: {player_one_state.laps}", True, TEXT)
-    player_two_text = font.render(f"Gold laps: {player_two_state.laps}", True, TEXT)
-
+    player_one_text = font.render(f"P1 laps: {player_one_state.laps}", True, TEXT)
     surface.blit(player_one_text, (20, 20))
-    surface.blit(player_two_text, (20, 55))
+
+    if player_two_state is not None:
+        player_two_text = font.render(f"P2 laps: {player_two_state.laps}", True, TEXT)
+        surface.blit(player_two_text, (20, 55))
 
     messages = []
     if player_one_state.crashed:
-        messages.append("Blue car lost")
-    if player_two_state.crashed:
-        messages.append("Gold car lost")
+        messages.append("P1 lost")
+    if player_two_state is not None and player_two_state.crashed:
+        messages.append("P2 lost")
 
     if messages:
         crash_font = pygame.font.SysFont("arial", 42, bold=True)
