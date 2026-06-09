@@ -37,3 +37,9 @@ class TrainingSettings:
 class WatchSettings:
     show_sensors: bool = True
     profile_index: int = 0
+
+
+@dataclass
+class EditTrackSettings:
+    track_name: str = ""
+    track_profile_index: int = 0

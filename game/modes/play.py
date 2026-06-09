@@ -23,10 +23,10 @@ from game.modes.settings import (
     PLAYER_TYPE_HUMAN_2,
     PlaySettings,
 )
-from game.models.track import create_ai_car, create_player_cars
+from game.models.track import create_ai_car, create_player_cars, CompiledTrack
 from game.paths import get_winner_path, NEAT_CONFIG_PATH
 from game.rendering.car import draw_car
-from game.rendering.track import build_track_mask, draw_track
+from game.rendering.track import draw_track
 from game.rendering.ui import draw_ui
 
 PLAYER_ONE_CONTROLS = {
@@ -43,15 +43,14 @@ PLAYER_TWO_CONTROLS = {
 }
 
 
-def run_play_mode(settings: PlaySettings) -> AppResult:
+def run_play_mode(settings: PlaySettings, track: CompiledTrack) -> AppResult:
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("2D Racing Game")
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("arial", 30, bold=True)
-    track_mask = build_track_mask()
 
-    drivers = _create_drivers(settings)
+    drivers = _create_drivers(settings, track)
     if not drivers:
         return RETURN_TO_MENU
 
@@ -67,12 +66,12 @@ def run_play_mode(settings: PlaySettings) -> AppResult:
 
         keys = pygame.key.get_pressed()
         for driver in drivers:
-            driver.update(keys, track_mask)
+            driver.update(keys, track)
 
         if settings.collisions_enabled:
             _handle_collisions(drivers)
 
-        draw_track(screen)
+        draw_track(screen, track)
         for driver in drivers:
             driver.draw(screen)
         draw_ui(
@@ -85,9 +84,9 @@ def run_play_mode(settings: PlaySettings) -> AppResult:
         clock.tick(FPS)
 
 
-def _create_drivers(settings: PlaySettings) -> list[Driver]:
+def _create_drivers(settings: PlaySettings, track: CompiledTrack) -> list[Driver]:
     drivers = []
-    player_cars = create_player_cars()
+    player_cars = create_player_cars(track)
     if settings.player_one_type != PLAYER_TYPE_EMPTY:
         drivers.append(
             _create_driver(
@@ -95,7 +94,8 @@ def _create_drivers(settings: PlaySettings) -> list[Driver]:
                 settings.player_one_ai_profile,
                 PLAYER_ONE,
                 PLAYER_ONE_CONTROLS,
-                player_cars[0]
+                player_cars[0],
+                track
             )
         )
     if settings.player_two_type != PLAYER_TYPE_EMPTY:
@@ -105,7 +105,8 @@ def _create_drivers(settings: PlaySettings) -> list[Driver]:
                 settings.player_two_ai_profile,
                 PLAYER_TWO,
                 PLAYER_TWO_CONTROLS,
-                player_cars[1]
+                player_cars[1],
+                track
             )
         )
     return drivers
@@ -117,9 +118,10 @@ def _create_driver(
     color: tuple[int, int, int],
     controls: Mapping[str, int] | None,
     car: Car,
+    track: CompiledTrack,
 ) -> Driver:
     if player_type == PLAYER_TYPE_AI:
-        return _create_ai_driver(ai_profile, color, car)
+        return _create_ai_driver(ai_profile, color, car, track)
     if player_type == PLAYER_TYPE_HUMAN_1:
         return HumanDriver(car, color, controls)
     if player_type == PLAYER_TYPE_HUMAN_2:
@@ -127,7 +129,7 @@ def _create_driver(
     raise ValueError(f"Unknown player type: {player_type}")
 
 
-def _create_ai_driver(profile_index: int, color: tuple[int, int, int], car: Car) -> Driver:
+def _create_ai_driver(profile_index: int, color: tuple[int, int, int], car: Car, track: CompiledTrack) -> Driver:
     neat = require_neat()
     winner_path = get_winner_path(profile_index)
     if not winner_path.exists():
@@ -166,7 +168,7 @@ class Driver:
     def draw(self, screen: pygame.Surface) -> None:
         draw_car(self.car, screen, self.color)
 
-    def update(self, keys: pygame.key.ScancodeWrapper, track_mask: pygame.mask.Mask) -> None:
+    def update(self, keys: pygame.key.ScancodeWrapper, track: CompiledTrack) -> None:
         raise NotImplementedError
 
 
@@ -180,7 +182,7 @@ class HumanDriver(Driver):
         super().__init__(car, color)
         self.controls = controls
 
-    def update(self, keys: pygame.key.ScancodeWrapper, track_mask: pygame.mask.Mask) -> None:
+    def update(self, keys: pygame.key.ScancodeWrapper, track: CompiledTrack) -> None:
         if self.race_state.crashed:
             return
 
@@ -190,11 +192,11 @@ class HumanDriver(Driver):
             left=keys[self.controls["left"]],
             right=keys[self.controls["right"]],
         )
-        if car_hits_wall(self.car, track_mask):
+        if car_hits_wall(self.car, track.mask):
             self.race_state.crashed = True
             return
 
-        advance_race_state(self.car, self.race_state)
+        advance_race_state(self.car, self.race_state, track)
 
 
 class AIDriver(Driver):
@@ -202,19 +204,19 @@ class AIDriver(Driver):
         super().__init__(car, color)
         self.net = net
 
-    def update(self, keys: pygame.key.ScancodeWrapper, track_mask: pygame.mask.Mask) -> None:
+    def update(self, keys: pygame.key.ScancodeWrapper, track: CompiledTrack) -> None:
         if self.race_state.crashed:
             return
 
-        inputs = network_inputs(self.car, self.race_state, track_mask)
+        inputs = network_inputs(self.car, self.race_state, track)
         outputs = self.net.activate(inputs)
         self._apply_ai_outputs(outputs)
 
-        if car_hits_wall(self.car, track_mask):
+        if car_hits_wall(self.car, track.mask):
             self.race_state.crashed = True
             return
 
-        advance_race_state(self.car, self.race_state)
+        advance_race_state(self.car, self.race_state, track)
 
     def _apply_ai_outputs(self, outputs: Sequence[float]) -> None:
         self.car.move(

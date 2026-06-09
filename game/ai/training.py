@@ -11,10 +11,10 @@ from game.config import AI_COLOR, FPS, GAME_OVER, HEIGHT, TEXT, WIDTH
 from game.logic.race import RaceState, advance_race_state, car_hits_wall, next_checkpoint_center
 from game.logic.sensors import read_car_sensors
 from game.modes.settings import TrainingSettings, WatchSettings
-from game.models.track import create_ai_car
+from game.models.track import create_ai_car, CompiledTrack
 from game.paths import NEAT_CONFIG_PATH, get_winner_path, get_winner_name_path
 from game.rendering.car import draw_car, draw_car_sensors
-from game.rendering.track import build_track_mask, draw_track
+from game.rendering.track import draw_track
 
 
 class TrainingStopped(Exception):
@@ -44,11 +44,11 @@ def distance_to_target(car: Car, target_x: float, target_y: float) -> float:
     return min(distance / max_distance, 1.0)
 
 
-def network_inputs(car: Car, race_state: RaceState, track_mask: pygame.mask.Mask) -> list[float]:
-    target_x, target_y = next_checkpoint_center(race_state)
+def network_inputs(car: Car, race_state: RaceState, track: CompiledTrack) -> list[float]:
+    target_x, target_y = next_checkpoint_center(race_state, track)
     sensors = [
         reading.normalized_distance
-        for reading in read_car_sensors(car, track_mask, WIDTH, HEIGHT)
+        for reading in read_car_sensors(car, track.mask, WIDTH, HEIGHT)
     ]
     return sensors + [
         car.speed / car.max_speed,
@@ -57,15 +57,13 @@ def network_inputs(car: Car, race_state: RaceState, track_mask: pygame.mask.Mask
     ]
 
 
-def run_training(settings: TrainingSettings | None = None) -> AppResult:
-    settings = settings or TrainingSettings()
+def run_training(settings: TrainingSettings, track: CompiledTrack) -> AppResult:
     neat = require_neat()
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("NEAT Car Training")
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("arial", 24, bold=True)
-    track_mask = build_track_mask()
 
     neat_config = _load_neat_config(neat)
 
@@ -78,7 +76,7 @@ def run_training(settings: TrainingSettings | None = None) -> AppResult:
         for _, genome in genomes:
             genome.fitness = 0.0
             nets.append(neat.nn.FeedForwardNetwork.create(genome, config))
-            cars.append(create_ai_car())
+            cars.append(create_ai_car(track))
             genome_refs.append(genome)
             race_states.append(RaceState())
 
@@ -91,7 +89,7 @@ def run_training(settings: TrainingSettings | None = None) -> AppResult:
             race_states=race_states,
             screen=screen,
             settings=settings,
-            track_mask=track_mask,
+            track=track,
         )
         if result is not None:
             raise TrainingStopped(result)
@@ -108,18 +106,16 @@ def run_training(settings: TrainingSettings | None = None) -> AppResult:
     winner_path = get_winner_path(settings.profile_index)
     winner_path.write_bytes(pickle.dumps(winner))
     
-    # Save the custom name if provided, else clear it
     name_path = get_winner_name_path(settings.profile_index)
     if settings.profile_name.strip():
         name_path.write_text(settings.profile_name.strip())
     elif name_path.exists():
         name_path.unlink()
-
+        
     return RETURN_TO_MENU
 
 
-def watch_winner(settings: WatchSettings | None = None) -> AppResult:
-    settings = settings or WatchSettings()
+def watch_winner(settings: WatchSettings, track: CompiledTrack) -> AppResult:
     neat = require_neat()
     winner_path = get_winner_path(settings.profile_index)
     if not winner_path.exists():
@@ -134,9 +130,8 @@ def watch_winner(settings: WatchSettings | None = None) -> AppResult:
     pygame.display.set_caption("NEAT Car Watch Mode")
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("arial", 28, bold=True)
-    track_mask = build_track_mask()
 
-    car = create_ai_car()
+    car = create_ai_car(track)
     race_state = RaceState()
     crashed = False
 
@@ -152,16 +147,16 @@ def watch_winner(settings: WatchSettings | None = None) -> AppResult:
                 crashed = False
 
         if not crashed:
-            outputs = net.activate(network_inputs(car, race_state, track_mask))
+            outputs = net.activate(network_inputs(car, race_state, track))
             _apply_ai_outputs(car, outputs)
-            crashed = car_hits_wall(car, track_mask)
+            crashed = car_hits_wall(car, track.mask)
             if not crashed:
-                advance_race_state(car, race_state)
+                advance_race_state(car, race_state, track)
 
-        draw_track(screen)
+        draw_track(screen, track)
         draw_car(car, screen, AI_COLOR)
         if settings.show_sensors:
-            draw_car_sensors(car, screen, track_mask)
+            draw_car_sensors(car, screen, track.mask)
         screen.blit(_watch_message(font, race_state, crashed), (20, 20))
         pygame.display.flip()
         clock.tick(FPS)
@@ -186,7 +181,7 @@ def _run_generation_loop(
     race_states: list[RaceState],
     screen: pygame.Surface,
     settings: TrainingSettings,
-    track_mask: pygame.mask.Mask,
+    track: CompiledTrack,
 ) -> AppResult | None:
     steps = 0
     while cars and steps < settings.max_steps:
@@ -198,9 +193,9 @@ def _run_generation_loop(
                 return RETURN_TO_MENU
 
         for index in range(len(cars) - 1, -1, -1):
-            _update_ai_driver(index, cars, genome_refs, nets, race_states, settings, track_mask)
+            _update_ai_driver(index, cars, genome_refs, nets, race_states, settings, track)
 
-        draw_track(screen)
+        draw_track(screen, track)
         for car in cars:
             draw_car(car, screen, AI_COLOR)
         screen.blit(_training_message(font, len(cars), steps, settings.max_steps), (20, 20))
@@ -217,22 +212,22 @@ def _update_ai_driver(
     nets: list,
     race_states: list[RaceState],
     settings: TrainingSettings,
-    track_mask: pygame.mask.Mask,
+    track: CompiledTrack,
 ) -> None:
     car = cars[index]
     genome = genome_refs[index]
     race_state = race_states[index]
 
-    outputs = nets[index].activate(network_inputs(car, race_state, track_mask))
+    outputs = nets[index].activate(network_inputs(car, race_state, track))
     _apply_ai_outputs(car, outputs)
     genome.fitness += max(car.speed, 0) * settings.speed_reward
 
-    if car_hits_wall(car, track_mask):
+    if car_hits_wall(car, track.mask):
         genome.fitness -= settings.wall_penalty
         _remove_ai_driver(index, cars, genome_refs, nets, race_states)
         return
 
-    reached_checkpoint, completed_lap = advance_race_state(car, race_state)
+    reached_checkpoint, completed_lap = advance_race_state(car, race_state, track)
     if reached_checkpoint:
         genome.fitness += settings.checkpoint_reward
     if completed_lap:

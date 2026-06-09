@@ -6,7 +6,7 @@ import pygame
 
 from game.config import HEIGHT, WIDTH
 from game.models.car import Car
-from game.models import track as track_model
+from game.models.track import CompiledTrack
 
 
 @dataclass
@@ -47,7 +47,7 @@ def cars_collide(first_car: Car, second_car: Car) -> bool:
     return first_mask.overlap(second_mask, (0, 0)) is not None
 
 
-def advance_race_state(car: Car, state: RaceState) -> tuple[bool, bool]:
+def advance_race_state(car: Car, state: RaceState, active_track: CompiledTrack) -> tuple[bool, bool]:
     checkpoint_index = state.checkpoint_index
     finish_armed = state.finish_armed
     previous_in_finish = state.in_finish
@@ -55,8 +55,6 @@ def advance_race_state(car: Car, state: RaceState) -> tuple[bool, bool]:
 
     reached_checkpoint = False
     completed_lap = False
-
-    active_track = track_model.ACTIVE_TRACK
 
     if checkpoint_index < len(active_track.checkpoints) and active_track.checkpoints[checkpoint_index].contains(car_point):
         checkpoint_index += 1
@@ -78,9 +76,7 @@ def advance_race_state(car: Car, state: RaceState) -> tuple[bool, bool]:
     return reached_checkpoint, completed_lap
 
 
-def next_checkpoint_center(state: RaceState) -> tuple[float, float]:
-    active_track = track_model.ACTIVE_TRACK
-
+def next_checkpoint_center(state: RaceState, active_track: CompiledTrack) -> tuple[float, float]:
     if state.checkpoint_index >= len(active_track.checkpoints):
         target = active_track.finish_line.center
     else:

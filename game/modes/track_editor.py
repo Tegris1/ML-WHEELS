@@ -5,11 +5,13 @@ import pygame
 from game.app_result import AppResult, QUIT, RETURN_TO_MENU
 from game.config import DEFAULT_TRACK_WIDTH, FPS, HEIGHT, MAX_TRACK_WIDTH, MIN_TRACK_WIDTH, WIDTH
 from game.models import track as track_model
+from game.modes.settings import EditTrackSettings
+from game.paths import get_track_name_path
 from game.rendering.track import render_layout_surface
 from game.ui import theme
 
 
-def run_track_editor() -> AppResult:
+def run_track_editor(settings: EditTrackSettings, track: track_model.CompiledTrack) -> AppResult:
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("ML-WHEELS - Track Editor")
@@ -19,8 +21,9 @@ def run_track_editor() -> AppResult:
 
     path_points: list[tuple[float, float]] = []
     drawing = False
-    track_width = track_model.current_layout().track_width
-    preview_surface = track_model.ACTIVE_TRACK.surface
+    
+    track_width = track.layout.track_width
+    preview_surface = track.surface
     status_message = "Hold left mouse button and draw a closed loop."
 
     while True:
@@ -32,13 +35,19 @@ def run_track_editor() -> AppResult:
                     return RETURN_TO_MENU
                 if event.key == pygame.K_RETURN:
                     try:
-                        layout = track_model.save_track_from_path(path_points, track_width)
+                        layout = track_model.build_layout_from_path(path_points, track_width)
+                        track_model.save_layout(layout, settings.track_profile_index)
+                        name_path = get_track_name_path(settings.track_profile_index)
+                        if settings.track_name.strip():
+                            name_path.write_text(settings.track_name.strip())
+                        elif name_path.exists():
+                            name_path.unlink()
                     except ValueError as error:
                         status_message = str(error)
                     else:
                         preview_surface = render_layout_surface(layout)
                         path_points = []
-                        status_message = "Track saved. Press Esc to return or draw a new layout."
+                        status_message = f"Track saved to profile {settings.track_profile_index + 1}. Press Esc to return."
                 elif event.key in (pygame.K_LEFTBRACKET, pygame.K_MINUS, pygame.K_KP_MINUS):
                     track_width = max(MIN_TRACK_WIDTH, track_width - 5)
                 elif event.key in (pygame.K_RIGHTBRACKET, pygame.K_EQUALS, pygame.K_PLUS, pygame.K_KP_PLUS):
@@ -47,11 +56,17 @@ def run_track_editor() -> AppResult:
                     path_points = []
                     status_message = "Canvas cleared."
                 elif event.key == pygame.K_d:
-                    track_model.use_default_track(persist=True)
-                    preview_surface = track_model.ACTIVE_TRACK.surface
+                    default_layout = track_model.create_default_layout()
+                    track_model.save_layout(default_layout, settings.track_profile_index)
+                    name_path = get_track_name_path(settings.track_profile_index)
+                    if settings.track_name.strip():
+                        name_path.write_text(settings.track_name.strip())
+                    elif name_path.exists():
+                        name_path.unlink()
+                    preview_surface = render_layout_surface(default_layout)
                     path_points = []
                     track_width = DEFAULT_TRACK_WIDTH
-                    status_message = "Default track restored."
+                    status_message = f"Default track restored to profile {settings.track_profile_index + 1}."
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 drawing = True
                 path_points = [event.pos]
@@ -83,7 +98,7 @@ def run_track_editor() -> AppResult:
                 for point in path_points:
                     pygame.draw.circle(screen, theme.TEXT, (int(point[0]), int(point[1])), 3)
 
-        _draw_overlay(screen, title_font, text_font, track_width, status_message, len(path_points))
+        _draw_overlay(screen, title_font, text_font, track_width, status_message, len(path_points), settings.track_profile_index, settings.track_name)
         pygame.display.flip()
         clock.tick(FPS)
 
@@ -95,14 +110,17 @@ def _draw_overlay(
     track_width: int,
     status_message: str,
     point_count: int,
+    profile_index: int,
+    track_name: str
 ) -> None:
     panel = pygame.Rect(18, 18, 964, 118)
     pygame.draw.rect(screen, theme.PANEL_SHADOW, panel.move(0, 6), border_radius=16)
     pygame.draw.rect(screen, theme.PANEL, panel, border_radius=16)
     pygame.draw.rect(screen, theme.BORDER_SOFT, panel, 2, border_radius=16)
     pygame.draw.line(screen, theme.ACCENT_DARK, (42, 24), (958, 24), 2)
-
-    title = title_font.render("Track Editor", True, theme.TEXT)
+    
+    display_name = track_name if track_name else "Unnamed"
+    title = title_font.render(f"Track Editor - Profile {profile_index + 1} [{display_name}]", True, theme.TEXT)
     screen.blit(title, (36, 32))
 
     details = [
