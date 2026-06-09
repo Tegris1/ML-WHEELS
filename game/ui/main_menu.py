@@ -29,6 +29,9 @@ MODE_EDIT_TRACK = "edit_track"
 TRAIN_PROFILE_RECT = pygame.Rect(560, 465, 280, 58)
 TRAIN_ADVANCED_TOGGLE_RECT = pygame.Rect(560, 550, 280, 58)
 ADVANCED_REWARDS_COMPACT_RECT = pygame.Rect(680, 340, 160, 34)
+MODE_PANEL_RECT = pygame.Rect(130, 196, 740, 132)
+PARAMETER_PANEL_RECT = pygame.Rect(130, 344, 740, 274)
+ACTION_PANEL_RECT = pygame.Rect(330, HEIGHT - 80, 340, 68)
 
 
 @dataclass
@@ -85,10 +88,10 @@ class MainMenu:
 
     def run(self, screen: pygame.Surface, clock: pygame.time.Clock) -> str:
         pygame.display.set_caption("ML-WHEELS - Main Menu")
-        title_font = pygame.font.SysFont("arial", 52, bold=True)
-        heading_font = pygame.font.SysFont("arial", 24, bold=True)
-        text_font = pygame.font.SysFont("arial", 22)
-        button_font = pygame.font.SysFont("arial", 24, bold=True)
+        title_font = pygame.font.SysFont("bahnschrift", 58, bold=True)
+        heading_font = pygame.font.SysFont("bahnschrift", 24, bold=True)
+        text_font = pygame.font.SysFont("segoeui", 21)
+        button_font = pygame.font.SysFont("bahnschrift", 24, bold=True)
         self._action = None
 
         while self._action is None:
@@ -239,10 +242,11 @@ class MainMenu:
         text_font: pygame.font.Font,
         button_font: pygame.font.Font,
     ) -> None:
-        screen.fill(theme.BACKGROUND)
+        self._draw_background(screen)
         self._draw_header(screen, title_font, text_font)
         self._draw_mode_panel(screen, heading_font, text_font, button_font)
         self._draw_parameters(screen, heading_font, text_font)
+        self._draw_panel(screen, ACTION_PANEL_RECT, elevated=True)
         for _, button in self._action_buttons():
             button.draw(screen, button_font)
 
@@ -252,12 +256,21 @@ class MainMenu:
         title_font: pygame.font.Font,
         text_font: pygame.font.Font,
     ) -> None:
+        title_shadow = title_font.render("ML-WHEELS", True, theme.PANEL_SHADOW)
         title = title_font.render("ML-WHEELS", True, theme.TEXT)
         subtitle = text_font.render(
-            "Select mode and run parameters", True, theme.TEXT_MUTED
+            "Tune drivers, training and track tools", True, theme.TEXT_MUTED
         )
+        screen.blit(title_shadow, title_shadow.get_rect(center=(WIDTH // 2 + 4, 94 + 5)))
         screen.blit(title, title.get_rect(center=(WIDTH // 2, 94)))
         screen.blit(subtitle, subtitle.get_rect(center=(WIDTH // 2, 142)))
+        pygame.draw.line(
+            screen,
+            theme.ACCENT_LIGHT,
+            (WIDTH // 2 - 96, 166),
+            (WIDTH // 2 + 96, 166),
+            3,
+        )
         if self.status_message:
             status = text_font.render(self.status_message, True, theme.WARNING)
             screen.blit(status, status.get_rect(center=(WIDTH // 2, 174)))
@@ -269,6 +282,7 @@ class MainMenu:
         text_font: pygame.font.Font,
         button_font: pygame.font.Font,
     ) -> None:
+        self._draw_panel(screen, MODE_PANEL_RECT)
         heading = heading_font.render("Mode", True, theme.TEXT)
         screen.blit(heading, (160, 206))
         for _, button in self._mode_buttons():
@@ -281,7 +295,7 @@ class MainMenu:
             MODE_EDIT_TRACK: "Draw and save a custom track layout.",
         }
         description = text_font.render(descriptions[self.mode], True, theme.TEXT_MUTED)
-        screen.blit(description, description.get_rect(center=(WIDTH // 2, 318)))
+        screen.blit(description, description.get_rect(center=(WIDTH // 2, 313)))
 
     def _draw_parameters(
         self,
@@ -289,8 +303,9 @@ class MainMenu:
         heading_font: pygame.font.Font,
         text_font: pygame.font.Font,
     ) -> None:
+        self._draw_panel(screen, PARAMETER_PANEL_RECT, accent_line=False)
         heading = heading_font.render("Parameters", True, theme.TEXT)
-        screen.blit(heading, (160, 338))
+        screen.blit(heading, (160, 330))
 
         if self.mode == MODE_PLAY:
             self.player_one_selector.draw(screen, text_font, heading_font)
@@ -477,8 +492,56 @@ class MainMenu:
         hovered = rect.collidepoint(pygame.mouse.get_pos())
         color = theme.ACCENT if hovered else theme.ACCENT_DARK
 
-        pygame.draw.rect(screen, color, rect, border_radius=8)
-        pygame.draw.rect(screen, theme.ACCENT, rect, 2, border_radius=8)
+        pygame.draw.rect(screen, theme.PANEL_SHADOW, rect.move(0, 4), border_radius=9)
+        pygame.draw.rect(screen, color, rect, border_radius=9)
+        pygame.draw.rect(screen, theme.ACCENT_LIGHT, rect, 2, border_radius=9)
 
         text = font.render("Advanced: ON", True, theme.TEXT)
         screen.blit(text, text.get_rect(center=rect.center))
+
+    def _draw_background(self, screen: pygame.Surface) -> None:
+        for y in range(HEIGHT):
+            ratio = y / max(HEIGHT - 1, 1)
+            color = self._blend(theme.BACKGROUND_TOP, theme.BACKGROUND_BOTTOM, ratio)
+            pygame.draw.line(screen, color, (0, y), (WIDTH, y))
+
+        pygame.draw.circle(screen, (47, 66, 49), (90, 110), 130)
+        pygame.draw.circle(screen, (23, 45, 41), (880, 92), 170)
+        pygame.draw.circle(screen, (48, 43, 30), (820, 650), 210)
+        pygame.draw.circle(screen, theme.BORDER_SOFT, (88, 112), 132, 2)
+        pygame.draw.circle(screen, theme.BORDER_SOFT, (880, 92), 172, 2)
+
+    def _draw_panel(
+        self,
+        screen: pygame.Surface,
+        rect: pygame.Rect,
+        elevated: bool = False,
+        accent_line: bool = True,
+    ) -> None:
+        pygame.draw.rect(screen, theme.PANEL_SHADOW, rect.move(0, 8), border_radius=18)
+        pygame.draw.rect(
+            screen,
+            theme.PANEL_ELEVATED if elevated else theme.PANEL,
+            rect,
+            border_radius=18,
+        )
+        pygame.draw.rect(screen, theme.BORDER_SOFT, rect, 2, border_radius=18)
+        if accent_line:
+            pygame.draw.line(
+                screen,
+                theme.ACCENT_DARK,
+                (rect.left + 20, rect.top + 3),
+                (rect.right - 20, rect.top + 3),
+                2,
+            )
+
+    def _blend(
+        self,
+        start: tuple[int, int, int],
+        end: tuple[int, int, int],
+        ratio: float,
+    ) -> tuple[int, int, int]:
+        return tuple(
+            int(start[channel] + (end[channel] - start[channel]) * ratio)
+            for channel in range(3)
+        )

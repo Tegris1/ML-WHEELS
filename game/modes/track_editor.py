@@ -14,8 +14,8 @@ def run_track_editor() -> AppResult:
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("ML-WHEELS - Track Editor")
     clock = pygame.time.Clock()
-    title_font = pygame.font.SysFont("arial", 28, bold=True)
-    text_font = pygame.font.SysFont("arial", 20)
+    title_font = pygame.font.SysFont("bahnschrift", 28, bold=True)
+    text_font = pygame.font.SysFont("segoeui", 20)
 
     path_points: list[tuple[float, float]] = []
     drawing = False
@@ -97,8 +97,10 @@ def _draw_overlay(
     point_count: int,
 ) -> None:
     panel = pygame.Rect(18, 18, 964, 118)
-    pygame.draw.rect(screen, theme.BACKGROUND, panel, border_radius=8)
-    pygame.draw.rect(screen, theme.BORDER, panel, 2, border_radius=8)
+    pygame.draw.rect(screen, theme.PANEL_SHADOW, panel.move(0, 6), border_radius=16)
+    pygame.draw.rect(screen, theme.PANEL, panel, border_radius=16)
+    pygame.draw.rect(screen, theme.BORDER_SOFT, panel, 2, border_radius=16)
+    pygame.draw.line(screen, theme.ACCENT_DARK, (42, 24), (958, 24), 2)
 
     title = title_font.render("Track Editor", True, theme.TEXT)
     screen.blit(title, (36, 32))
