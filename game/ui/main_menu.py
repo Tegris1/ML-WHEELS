@@ -26,6 +26,10 @@ MODE_TRAIN = "train"
 MODE_WATCH = "watch"
 MODE_EDIT_TRACK = "edit_track"
 
+TRAIN_PROFILE_RECT = pygame.Rect(560, 465, 280, 58)
+TRAIN_ADVANCED_TOGGLE_RECT = pygame.Rect(560, 550, 280, 58)
+ADVANCED_REWARDS_COMPACT_RECT = pygame.Rect(680, 340, 160, 34)
+
 
 @dataclass
 class MenuSelection:
@@ -67,7 +71,7 @@ class MainMenu:
         self._update_profile_name_input()
 
         # Advanced Rewards
-        self.advanced_rewards_toggle = Toggle("Advanced rewards", False, pygame.Rect(560, 550, 280, 58))
+        self.advanced_rewards_toggle = Toggle("Advanced rewards", False, TRAIN_ADVANCED_TOGGLE_RECT.copy())
         self.speed_reward = Stepper("Speed rew (x100)", 2, 0, 10, 1, pygame.Rect(160, 380, 280, 58))
         self.wall_penalty = Stepper("Wall pen", 2, 0, 10, 1, pygame.Rect(160, 465, 280, 58))
         self.checkpoint_reward = Stepper("Checkpoint rew", 20, 0, 100, 5, pygame.Rect(160, 550, 280, 58))
@@ -167,8 +171,8 @@ class MainMenu:
             self.play_collisions.handle_event(event)
             
         elif self.mode == MODE_TRAIN:
-            self.profile_name_input.handle_event(event)
             if not self.advanced_rewards_toggle.value:
+                self.profile_name_input.handle_event(event)
                 old_index = self.ai_profile.selected_index
                 
                 self.training_generations.handle_event(event)
@@ -177,12 +181,11 @@ class MainMenu:
                 
                 # Handling AI profile in its Train rect
                 original_profile_rect = self.ai_profile.rect
-                self.ai_profile.rect = pygame.Rect(560, 465, 280, 58)
+                self.ai_profile.rect = TRAIN_PROFILE_RECT.copy()
                 self.ai_profile.handle_event(event)
                 self.ai_profile.rect = original_profile_rect
 
-                self.advanced_rewards_toggle.rect = pygame.Rect(560, 550, 280, 58)
-                self.advanced_rewards_toggle.handle_event(event)
+                self._handle_advanced_rewards_toggle(event, TRAIN_ADVANCED_TOGGLE_RECT)
                 
                 if old_index != self.ai_profile.selected_index:
                     self._update_profile_name_input()
@@ -194,8 +197,7 @@ class MainMenu:
                 self.stuck_penalty.handle_event(event)
                 self.finish_reward.handle_event(event)
                 
-                self.advanced_rewards_toggle.rect = pygame.Rect(360, 620, 280, 40)
-                self.advanced_rewards_toggle.handle_event(event)
+                self._handle_advanced_rewards_toggle(event, ADVANCED_REWARDS_COMPACT_RECT)
 
         elif self.mode == MODE_WATCH:
             self.watch_sensors.handle_event(event)
@@ -308,13 +310,13 @@ class MainMenu:
                 self.training_target_laps.draw(screen, text_font, heading_font)
                 
                 original_profile_rect = self.ai_profile.rect
-                self.ai_profile.rect = pygame.Rect(560, 465, 280, 58)
+                self.ai_profile.rect = TRAIN_PROFILE_RECT.copy()
                 self.ai_profile.draw(screen, text_font, heading_font)
                 self.ai_profile.rect = original_profile_rect
 
                 self.profile_name_input.draw(screen, text_font, heading_font)
                 
-                self.advanced_rewards_toggle.rect = pygame.Rect(560, 550, 280, 58)
+                self.advanced_rewards_toggle.rect = TRAIN_ADVANCED_TOGGLE_RECT.copy()
                 self.advanced_rewards_toggle.draw(screen, text_font, heading_font)
             else:
                 self.speed_reward.draw(screen, text_font, heading_font)
@@ -324,8 +326,7 @@ class MainMenu:
                 self.stuck_penalty.draw(screen, text_font, heading_font)
                 self.finish_reward.draw(screen, text_font, heading_font)
                 
-                self.advanced_rewards_toggle.rect = pygame.Rect(360, 620, 280, 40)
-                self.advanced_rewards_toggle.draw(screen, text_font, heading_font)
+                self._draw_compact_advanced_rewards_toggle(screen, text_font)
             return
 
         if self.mode == MODE_EDIT_TRACK:
@@ -455,3 +456,29 @@ class MainMenu:
             except ValueError:
                 pass
         return None
+
+    def _handle_advanced_rewards_toggle(
+        self,
+        event: pygame.event.Event,
+        rect: pygame.Rect,
+    ) -> None:
+        was_enabled = self.advanced_rewards_toggle.value
+        self.advanced_rewards_toggle.rect = rect.copy()
+        self.advanced_rewards_toggle.handle_event(event)
+        if self.advanced_rewards_toggle.value and not was_enabled:
+            self.profile_name_input.active = False
+
+    def _draw_compact_advanced_rewards_toggle(
+        self,
+        screen: pygame.Surface,
+        font: pygame.font.Font,
+    ) -> None:
+        rect = ADVANCED_REWARDS_COMPACT_RECT
+        hovered = rect.collidepoint(pygame.mouse.get_pos())
+        color = theme.ACCENT if hovered else theme.ACCENT_DARK
+
+        pygame.draw.rect(screen, color, rect, border_radius=8)
+        pygame.draw.rect(screen, theme.ACCENT, rect, 2, border_radius=8)
+
+        text = font.render("Advanced: ON", True, theme.TEXT)
+        screen.blit(text, text.get_rect(center=rect.center))
