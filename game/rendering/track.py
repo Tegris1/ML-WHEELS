@@ -3,8 +3,7 @@ import random
 import pygame
 
 from game.config import FINISH, GRASS, HEIGHT, LINE, ROAD, ROAD_EDGE, TEXT, WIDTH
-from game.models import track as track_model
-from game.models.track import TrackLayout
+from game.models.track import TrackLayout, CompiledTrack
 
 
 def _draw_path(
@@ -13,7 +12,7 @@ def _draw_path(
     color: tuple[int, int, int],
     width: int,
 ) -> None:
-    path_points = track_model.layout_path_points(layout)
+    path_points = [(int(x), int(y)) for x, y in layout.centerline]
     pygame.draw.lines(surface, color, True, path_points, width)
     radius = max(2, width // 2)
     for x, y in path_points:
@@ -190,9 +189,5 @@ def render_layout_mask(layout: TrackLayout) -> pygame.mask.Mask:
     return pygame.mask.from_threshold(mask_surface, (255, 255, 255), (1, 1, 1, 255))
 
 
-def build_track_mask() -> pygame.mask.Mask:
-    return track_model.ACTIVE_TRACK.mask
-
-
-def draw_track(surface: pygame.Surface) -> None:
-    surface.blit(track_model.ACTIVE_TRACK.surface, (0, 0))
+def draw_track(surface: pygame.Surface, track: CompiledTrack) -> None:
+    surface.blit(track.surface, (0, 0))

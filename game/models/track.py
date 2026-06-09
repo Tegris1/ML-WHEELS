@@ -18,7 +18,7 @@ from game.config import (
     TRACK_SPACING,
 )
 from game.models.car import Car
-from game.paths import TRACK_LAYOUT_PATH
+from game.paths import get_track_layout_path, get_track_name_path
 
 
 @dataclass(frozen=True)
@@ -225,20 +225,30 @@ def compile_track(layout: TrackLayout) -> CompiledTrack:
     )
 
 
-def save_layout(layout: TrackLayout) -> None:
+def save_layout(layout: TrackLayout, profile_index: int) -> None:
     payload = {
         "track_width": layout.track_width,
         "centerline": [[round(x, 2), round(y, 2)] for x, y in layout.centerline],
     }
-    TRACK_LAYOUT_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    path = get_track_layout_path(profile_index)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def load_layout() -> TrackLayout:
-    if not TRACK_LAYOUT_PATH.exists():
+def save_track_name(name: str, profile_index: int) -> None:
+    name_path = get_track_name_path(profile_index)
+    if name.strip():
+        name_path.write_text(name.strip(), encoding="utf-8")
+    elif name_path.exists():
+        name_path.unlink()
+
+
+def load_layout(profile_index: int) -> TrackLayout:
+    path = get_track_layout_path(profile_index)
+    if not path.exists():
         return create_default_layout()
 
     try:
-        payload = json.loads(TRACK_LAYOUT_PATH.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8"))
         centerline = payload["centerline"]
         track_width = int(payload["track_width"])
         return build_layout_from_path(centerline, track_width)
@@ -246,62 +256,23 @@ def load_layout() -> TrackLayout:
         return create_default_layout()
 
 
-ACTIVE_TRACK = compile_track(load_layout())
-
-
-def current_layout() -> TrackLayout:
-    return ACTIVE_TRACK.layout
-
-
-def reload_active_track() -> None:
-    global ACTIVE_TRACK
-    ACTIVE_TRACK = compile_track(load_layout())
-
-
-def use_layout(layout: TrackLayout, persist: bool = False) -> None:
-    global ACTIVE_TRACK
-    ACTIVE_TRACK = compile_track(layout)
-    if persist:
-        save_layout(layout)
-
-
-def use_default_track(persist: bool = False) -> None:
-    use_layout(create_default_layout(), persist=persist)
-
-
-def save_track_from_path(points: list[tuple[float, float]], track_width: int) -> TrackLayout:
-    layout = build_layout_from_path(points, track_width)
-    use_layout(layout, persist=True)
-    return layout
-
-
-def pickup_spawn_points(count: int = 8) -> list[tuple[float, float]]:
-    layout = ACTIVE_TRACK.layout
-    points = []
-    step = len(layout.centerline) / count
-    for order in range(count):
-        index = int(round(layout.start_index + (step * order))) % len(layout.centerline)
-        points.append(layout.centerline[index])
-    return points
-
-
-def create_player_cars() -> tuple[Car, Car]:
+def create_player_cars(track: CompiledTrack) -> tuple[Car, Car]:
     player_one = Car(
-        start_x=ACTIVE_TRACK.player_one_start[0],
-        start_y=ACTIVE_TRACK.player_one_start[1],
-        start_angle=ACTIVE_TRACK.player_one_start[2],
+        start_x=track.player_one_start[0],
+        start_y=track.player_one_start[1],
+        start_angle=track.player_one_start[2],
     )
     player_two = Car(
-        start_x=ACTIVE_TRACK.player_two_start[0],
-        start_y=ACTIVE_TRACK.player_two_start[1],
-        start_angle=ACTIVE_TRACK.player_two_start[2],
+        start_x=track.player_two_start[0],
+        start_y=track.player_two_start[1],
+        start_angle=track.player_two_start[2],
     )
     return player_one, player_two
 
 
-def create_ai_car(color: tuple[int, int, int] = AI_COLOR) -> Car:
+def create_ai_car(track: CompiledTrack, color: tuple[int, int, int] = AI_COLOR) -> Car:
     return Car(
-        start_x=ACTIVE_TRACK.ai_start[0],
-        start_y=ACTIVE_TRACK.ai_start[1],
-        start_angle=ACTIVE_TRACK.ai_start[2],
+        start_x=track.ai_start[0],
+        start_y=track.ai_start[1],
+        start_angle=track.ai_start[2],
     )

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import pygame
 
-from game.config import AI_PROFILES, FPS, HEIGHT, WIDTH
+from game.config import AI_PROFILES, TRACK_PROFILES, FPS, HEIGHT, WIDTH
 from game.modes.settings import (
     PLAYER_TYPE_AI,
     PLAYER_TYPE_EMPTY,
@@ -13,8 +13,9 @@ from game.modes.settings import (
     PlaySettings,
     TrainingSettings,
     WatchSettings,
+    EditTrackSettings,
 )
-from game.paths import get_winner_path, get_winner_name_path
+from game.paths import get_winner_path, get_winner_name_path, get_track_layout_path, get_track_name_path
 from game.ui import theme
 from game.ui.controls import Button, Selector, Stepper, Toggle, TextInput
 
@@ -37,14 +38,22 @@ ACTION_PANEL_RECT = pygame.Rect(330, HEIGHT - 80, 340, 68)
 @dataclass
 class MenuSelection:
     mode: str
+    track_profile_index: int
     play: PlaySettings
     training: TrainingSettings
     watch: WatchSettings
+    edit_track: EditTrackSettings
 
 
 class MainMenu:
     def __init__(self) -> None:
         self.mode = MODE_PLAY
+        
+        # Track Profile Selector (Visible everywhere)
+        self.track_profile = self._create_track_selector(
+            "Track Profile", pygame.Rect(160, 290, 280, 58)
+        )
+
         self.player_one_selector = self._create_player_selector(
             "Player 1", pygame.Rect(160, 380, 280, 58)
         )
@@ -83,6 +92,12 @@ class MainMenu:
         self.finish_reward = Stepper("Finish rew", 250, 0, 1000, 50, pygame.Rect(560, 550, 280, 58))
 
         self.watch_sensors = Toggle("AI sensors", True, pygame.Rect(160, 380, 280, 58))
+        
+        self.track_name_input = TextInput(
+            "Track Name", "", pygame.Rect(160, 380, 280, 58)
+        )
+        self._update_track_name_input()
+        
         self.status_message: str | None = None
         self._action: str | None = None
 
@@ -107,6 +122,7 @@ class MainMenu:
     def selection(self) -> MenuSelection:
         return MenuSelection(
             mode=self.mode,
+            track_profile_index=self.track_profile.selected_index,
             play=self._play_settings(),
             training=TrainingSettings(
                 generations=self.training_generations.value,
@@ -125,6 +141,10 @@ class MainMenu:
                 show_sensors=self.watch_sensors.value,
                 profile_index=self.ai_profile.selected_index,
             ),
+            edit_track=EditTrackSettings(
+                track_name=self.track_name_input.text,
+                track_profile_index=self.track_profile.selected_index,
+            ),
         )
 
     def set_status(self, message: str) -> None:
@@ -137,25 +157,29 @@ class MainMenu:
         if event.type == pygame.QUIT:
             self._action = ACTION_QUIT
             return
+            
+        input_active = self.profile_name_input.active or self.track_name_input.active
+        
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self._action = ACTION_QUIT
                 return
-            if event.key == pygame.K_RETURN and not self.profile_name_input.active:
+            if event.key == pygame.K_RETURN and not input_active:
                 if self._can_start():
                     self._action = ACTION_START
                 return
-            if event.key in (pygame.K_1, pygame.K_KP1) and not self.profile_name_input.active:
+            if event.key in (pygame.K_1, pygame.K_KP1) and not input_active:
                 self.mode = MODE_PLAY
                 self._refresh_selectors()
-            elif event.key in (pygame.K_2, pygame.K_KP2) and not self.profile_name_input.active:
+            elif event.key in (pygame.K_2, pygame.K_KP2) and not input_active:
                 self.mode = MODE_TRAIN
                 self._refresh_selectors()
-            elif event.key in (pygame.K_3, pygame.K_KP3) and not self.profile_name_input.active:
+            elif event.key in (pygame.K_3, pygame.K_KP3) and not input_active:
                 self.mode = MODE_WATCH
                 self._refresh_selectors()
-            elif event.key in (pygame.K_4, pygame.K_KP4) and not self.profile_name_input.active:
+            elif event.key in (pygame.K_4, pygame.K_KP4) and not input_active:
                 self.mode = MODE_EDIT_TRACK
+                self._update_track_name_input()
 
         for mode, button in self._mode_buttons():
             if button.handle_event(event):
@@ -163,10 +187,21 @@ class MainMenu:
                 self._refresh_selectors()
                 if mode == MODE_TRAIN:
                     self._update_profile_name_input()
+                elif mode == MODE_EDIT_TRACK:
+                    self._update_track_name_input()
 
         for action, button in self._action_buttons():
-            if button.handle_event(event) and self._can_start():
-                self._action = action
+            if button.handle_event(event):
+                if action == ACTION_START:
+                    if self._can_start():
+                        self._action = action
+                else:
+                    self._action = action
+                
+        old_track_index = self.track_profile.selected_index
+        self.track_profile.handle_event(event)
+        if old_track_index != self.track_profile.selected_index:
+            self._update_track_name_input()
 
         if self.mode == MODE_PLAY:
             self.player_one_selector.handle_event(event)
@@ -176,7 +211,7 @@ class MainMenu:
         elif self.mode == MODE_TRAIN:
             if not self.advanced_rewards_toggle.value:
                 self.profile_name_input.handle_event(event)
-                old_index = self.ai_profile.selected_index
+                old_ai_index = self.ai_profile.selected_index
                 
                 self.training_generations.handle_event(event)
                 self.training_max_steps.handle_event(event)
@@ -190,7 +225,7 @@ class MainMenu:
 
                 self._handle_advanced_rewards_toggle(event, TRAIN_ADVANCED_TOGGLE_RECT)
                 
-                if old_index != self.ai_profile.selected_index:
+                if old_ai_index != self.ai_profile.selected_index:
                     self._update_profile_name_input()
             else:
                 self.speed_reward.handle_event(event)
@@ -210,12 +245,15 @@ class MainMenu:
             self.ai_profile.rect = pygame.Rect(560, 380, 280, 58)
             self.ai_profile.handle_event(event)
             self.ai_profile.rect = original_profile_rect
+            
+        elif self.mode == MODE_EDIT_TRACK:
+            self.track_name_input.handle_event(event)
 
     def _refresh_selectors(self):
-        # Keeps selected indices but refreshes names
         p1_idx = self.player_one_selector.selected_index
         p2_idx = self.player_two_selector.selected_index
         prof_idx = self.ai_profile.selected_index
+        track_idx = self.track_profile.selected_index
 
         self.player_one_selector = self._create_player_selector("Player 1", self.player_one_selector.rect)
         self.player_one_selector.selected_index = min(p1_idx, len(self.player_one_selector.options) - 1)
@@ -225,7 +263,9 @@ class MainMenu:
         
         self.ai_profile = self._create_profile_selector("AI Profile", self.ai_profile.rect)
         self.ai_profile.selected_index = min(prof_idx, len(self.ai_profile.options) - 1)
-
+        
+        self.track_profile = self._create_track_selector("Track Profile", self.track_profile.rect)
+        self.track_profile.selected_index = min(track_idx, len(self.track_profile.options) - 1)
 
     def _update_profile_name_input(self):
         name_path = get_winner_name_path(self.ai_profile.selected_index)
@@ -233,6 +273,13 @@ class MainMenu:
             self.profile_name_input.text = name_path.read_text().strip()
         else:
             self.profile_name_input.text = ""
+            
+    def _update_track_name_input(self):
+        name_path = get_track_name_path(self.track_profile.selected_index)
+        if name_path.exists():
+            self.track_name_input.text = name_path.read_text().strip()
+        else:
+            self.track_name_input.text = ""
 
     def _draw(
         self,
@@ -306,6 +353,8 @@ class MainMenu:
         self._draw_panel(screen, PARAMETER_PANEL_RECT, accent_line=False)
         heading = heading_font.render("Parameters", True, theme.TEXT)
         screen.blit(heading, (160, 330))
+        
+        self.track_profile.draw(screen, text_font, heading_font)
 
         if self.mode == MODE_PLAY:
             self.player_one_selector.draw(screen, text_font, heading_font)
@@ -328,7 +377,7 @@ class MainMenu:
                 self.ai_profile.rect = TRAIN_PROFILE_RECT.copy()
                 self.ai_profile.draw(screen, text_font, heading_font)
                 self.ai_profile.rect = original_profile_rect
-
+                
                 self.profile_name_input.draw(screen, text_font, heading_font)
                 
                 self.advanced_rewards_toggle.rect = TRAIN_ADVANCED_TOGGLE_RECT.copy()
@@ -345,13 +394,7 @@ class MainMenu:
             return
 
         if self.mode == MODE_EDIT_TRACK:
-            lines = [
-                "Left-drag to sketch the track centerline.",
-                "Use [ and ] to change width, Enter to save, D for default track.",
-            ]
-            for index, line in enumerate(lines):
-                text = text_font.render(line, True, theme.TEXT_MUTED)
-                screen.blit(text, text.get_rect(center=(WIDTH // 2, 410 + index * 34)))
+            self.track_name_input.draw(screen, text_font, heading_font)
             return
 
         # MODE_WATCH layout
@@ -422,6 +465,16 @@ class MainMenu:
         if get_winner_path(index).exists():
             return f"Profile {index + 1} [Trained]"
         return f"Profile {index + 1} [Empty]"
+        
+    def _format_track_name(self, index: int) -> str:
+        name_path = get_track_name_path(index)
+        if name_path.exists():
+            custom_name = name_path.read_text().strip()
+            if custom_name:
+                return f"Track {index + 1} [{custom_name}]"
+        if get_track_layout_path(index).exists():
+            return f"Track {index + 1} [Saved]"
+        return f"Track {index + 1} [Default]"
 
     def _create_profile_selector(self, label: str, rect: pygame.Rect) -> Selector:
         options = [self._format_profile_name(i) for i in range(AI_PROFILES)]
@@ -432,6 +485,10 @@ class MainMenu:
         for i in range(AI_PROFILES):
             if get_winner_path(i).exists():
                 options.append(self._format_profile_name(i))
+        return Selector(label, options, 0, rect)
+        
+    def _create_track_selector(self, label: str, rect: pygame.Rect) -> Selector:
+        options = [self._format_track_name(i) for i in range(TRACK_PROFILES)]
         return Selector(label, options, 0, rect)
 
     def _play_settings(self) -> PlaySettings:
