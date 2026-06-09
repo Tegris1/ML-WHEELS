@@ -184,6 +184,7 @@ def _run_generation_loop(
     track: CompiledTrack,
 ) -> AppResult | None:
     steps = 0
+    training_fps = max(1, settings.training_fps)
     while cars and steps < settings.max_steps:
         steps += 1
         for event in pygame.event.get():
@@ -198,9 +199,18 @@ def _run_generation_loop(
         draw_track(screen, track)
         for car in cars:
             draw_car(car, screen, AI_COLOR)
-        screen.blit(_training_message(font, len(cars), steps, settings.max_steps), (20, 20))
+        screen.blit(
+            _training_message(
+                font,
+                len(cars),
+                steps,
+                settings.max_steps,
+                training_fps,
+            ),
+            (20, 20),
+        )
         pygame.display.flip()
-        clock.tick(FPS)
+        clock.tick(training_fps)
 
     return None
 
@@ -266,9 +276,10 @@ def _training_message(
     car_count: int,
     steps: int,
     max_steps: int,
+    training_fps: int,
 ) -> pygame.Surface:
     return font.render(
-        f"Training cars: {car_count}  Step: {steps}/{max_steps}  Esc: menu",
+        f"Training cars: {car_count}  Step: {steps}/{max_steps}  FPS: {training_fps}  Esc: menu",
         True,
         TEXT,
     )

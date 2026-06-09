@@ -7,11 +7,11 @@ from game.config import DEFAULT_TRACK_WIDTH, FPS, HEIGHT, MAX_TRACK_WIDTH, MIN_T
 from game.models import track as track_model
 from game.modes.settings import EditTrackSettings
 from game.paths import get_track_name_path
-from game.rendering.track import render_layout_surface
+from game.rendering.track import render_layout_preview_surface, render_layout_surface
 from game.ui import theme
 
 
-def run_track_editor(settings: EditTrackSettings, track: track_model.CompiledTrack) -> AppResult:
+def run_track_editor(settings: EditTrackSettings, layout: track_model.TrackLayout) -> AppResult:
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("ML-WHEELS - Track Editor")
@@ -22,8 +22,8 @@ def run_track_editor(settings: EditTrackSettings, track: track_model.CompiledTra
     path_points: list[tuple[float, float]] = []
     drawing = False
     
-    track_width = track.layout.track_width
-    preview_surface = track.surface
+    track_width = layout.track_width
+    preview_surface = render_layout_preview_surface(layout)
     status_message = "Hold left mouse button and draw a closed loop."
 
     while True:
@@ -63,7 +63,7 @@ def run_track_editor(settings: EditTrackSettings, track: track_model.CompiledTra
                         name_path.write_text(settings.track_name.strip())
                     elif name_path.exists():
                         name_path.unlink()
-                    preview_surface = render_layout_surface(default_layout)
+                    preview_surface = render_layout_preview_surface(default_layout)
                     path_points = []
                     track_width = DEFAULT_TRACK_WIDTH
                     status_message = f"Default track restored to profile {settings.track_profile_index + 1}."
@@ -90,7 +90,7 @@ def run_track_editor(settings: EditTrackSettings, track: track_model.CompiledTra
                 preview_layout = None
 
         if preview_layout is not None:
-            screen.blit(render_layout_surface(preview_layout), (0, 0))
+            screen.blit(render_layout_preview_surface(preview_layout), (0, 0))
         else:
             screen.blit(preview_surface, (0, 0))
             if len(path_points) >= 2:

@@ -19,15 +19,19 @@ def run_app() -> None:
             selection = menu.selection()
             
             track_layout = load_layout(selection.track_profile_index)
-            compiled_track = compile_track(track_layout)
+            track = (
+                track_layout
+                if selection.mode == "edit_track"
+                else compile_track(track_layout)
+            )
 
-            result = _run_mode(selection, compiled_track)
+            result = _run_mode(selection, track)
             if result == QUIT:
                 break
             menu.clear_status()
 
 
-def _run_mode(selection: MenuSelection, track: "CompiledTrack") -> AppResult:
+def _run_mode(selection: MenuSelection, track) -> AppResult:
     if selection.mode == "train":
         from game.ai.training import run_training
 

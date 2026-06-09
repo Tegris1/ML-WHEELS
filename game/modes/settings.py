@@ -20,8 +20,9 @@ class PlaySettings:
 @dataclass
 class TrainingSettings:
     generations: int = 50
-    max_steps: int = 1800
+    max_steps: int = 400
     target_laps: int = 3
+    training_fps: int = 120
     profile_index: int = 0
     profile_name: str = ""
     # Advanced rewards

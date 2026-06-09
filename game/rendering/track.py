@@ -182,6 +182,29 @@ def render_layout_surface(layout: TrackLayout) -> pygame.Surface:
     return surface
 
 
+def render_layout_preview_surface(layout: TrackLayout) -> pygame.Surface:
+    surface = pygame.Surface((WIDTH, HEIGHT))
+    surface.fill(GRASS)
+    _draw_path(surface, layout, ROAD_EDGE, layout.edge_width)
+    _draw_path(surface, layout, ROAD, layout.track_width)
+
+    dash_span = 4
+    dash_stride = 7
+    path_points = layout.centerline
+    for index in range(0, len(path_points), dash_stride):
+        dash_points = [
+            (
+                int(path_points[(index + offset) % len(path_points)][0]),
+                int(path_points[(index + offset) % len(path_points)][1]),
+            )
+            for offset in range(dash_span)
+        ]
+        pygame.draw.lines(surface, LINE, False, dash_points, 4)
+
+    _draw_finish_line(surface, layout)
+    return surface
+
+
 def render_layout_mask(layout: TrackLayout) -> pygame.mask.Mask:
     mask_surface = pygame.Surface((WIDTH, HEIGHT))
     mask_surface.fill((0, 0, 0))

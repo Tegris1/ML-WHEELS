@@ -13,12 +13,13 @@ def _draw_shadow(surface: pygame.Surface, rect: pygame.Rect, radius: int = 10) -
 
 def _draw_label(
     surface: pygame.Surface,
-    font: pygame.font.Font,
+    _font: pygame.font.Font,
     label: str,
     rect: pygame.Rect,
 ) -> None:
-    text = font.render(label.upper(), True, theme.TEXT_MUTED)
-    surface.blit(text, (rect.left, rect.top - 28))
+    compact_font = pygame.font.SysFont("segoeui", 16)
+    text = compact_font.render(label.upper(), True, theme.TEXT_MUTED)
+    surface.blit(text, (rect.left, rect.top - 22))
 
 
 @dataclass
@@ -213,6 +214,7 @@ class TextInput:
     text: str
     rect: pygame.Rect
     active: bool = False
+    placeholder: str = "profile tag"
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.MOUSEBUTTONDOWN:
@@ -244,7 +246,7 @@ class TextInput:
         border_color = theme.ACCENT if self.active else theme.BORDER
         pygame.draw.rect(surface, border_color, self.rect, 2, border_radius=10)
 
-        shown_text = self.text or "profile tag"
+        shown_text = self.text or self.placeholder
         text_color = theme.TEXT if self.text else theme.TEXT_MUTED
         text_surface = value_font.render(shown_text + ("_" if self.active else ""), True, text_color)
         # Center the text inside the rect
